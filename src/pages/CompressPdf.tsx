@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import {
   Minimize2, ShieldCheck, Zap, ArrowRight, Upload, FileDown,
-  Gauge, Settings2, Target, Eye, Trash2, Info, BarChart3,
-  FileText, ChevronDown, ChevronUp,
+  Gauge, Settings2, Target, Trash2, Info, BarChart3,
+  FileText,
 } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
 import { FileDropZone } from "@/components/tool/FileDropZone";
@@ -117,134 +117,6 @@ function estimateCompressedSize(originalSize: number, quality: number, dpi: numb
   // Most PDFs compress between 10-80% of original
   const estimated = originalSize * Math.max(0.08, compression * 0.85);
   return Math.round(estimated);
-}
-
-/* ─── Quality Preview ─── */
-function QualityPreview({
-  file,
-  quality,
-  dpi,
-}: {
-  file: File;
-  quality: number;
-  dpi: number;
-}) {
-  const originalCanvasRef = useRef<HTMLCanvasElement>(null);
-  const compressedCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [originalSize, setOriginalSize] = useState(0);
-  const [compressedSize, setCompressedSize] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function renderPreview() {
-      setLoading(true);
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
-
-        // Original render at full scale
-        const baseViewport = page.getViewport({ scale: 1 });
-        const previewScale = Math.min(250 / baseViewport.width, 250 / baseViewport.height);
-        const viewport = page.getViewport({ scale: previewScale });
-
-        // Render original
-        const origCanvas = originalCanvasRef.current;
-        if (!origCanvas || cancelled) return;
-        origCanvas.width = viewport.width;
-        origCanvas.height = viewport.height;
-        const origCtx = origCanvas.getContext("2d")!;
-        await page.render({ canvasContext: origCtx, viewport }).promise;
-
-        const origBlob = await new Promise<Blob>((r) =>
-          origCanvas.toBlob((b) => r(b!), "image/jpeg", 0.95)
-        );
-        if (cancelled) return;
-        setOriginalSize(origBlob.size);
-
-        // Render compressed version
-        const dpiScale = Math.min(dpi / 150, 1); // Relative to a 150 DPI reference
-        const compScale = previewScale * dpiScale;
-        const compViewport = page.getViewport({ scale: compScale });
-
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = compViewport.width;
-        tempCanvas.height = compViewport.height;
-        const tempCtx = tempCanvas.getContext("2d")!;
-        await page.render({ canvasContext: tempCtx, viewport: compViewport }).promise;
-
-        // Re-encode at target quality
-        const compBlob = await new Promise<Blob>((r) =>
-          tempCanvas.toBlob((b) => r(b!), "image/jpeg", quality / 100)
-        );
-        if (cancelled) return;
-        setCompressedSize(compBlob.size);
-
-        // Draw compressed to preview canvas (scaled up to match original)
-        const compCanvas = compressedCanvasRef.current;
-        if (!compCanvas) return;
-        compCanvas.width = viewport.width;
-        compCanvas.height = viewport.height;
-        const compCtx2 = compCanvas.getContext("2d")!;
-        const compImg = new window.Image();
-        const compUrl = URL.createObjectURL(compBlob);
-        await new Promise<void>((resolve) => {
-          compImg.onload = () => {
-            compCtx2.drawImage(compImg, 0, 0, viewport.width, viewport.height);
-            URL.revokeObjectURL(compUrl);
-            resolve();
-          };
-          compImg.src = compUrl;
-        });
-
-        pdf.destroy();
-      } catch {
-        // Preview failed silently
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    renderPreview();
-    return () => { cancelled = true; };
-  }, [file, quality, dpi]);
-
-  return (
-    <div className="bg-card border rounded-xl p-4 animate-fade-in">
-      <div className="flex items-center gap-2 mb-3">
-        <Eye className="w-4 h-4 text-primary" />
-        <h3 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-          Quality Preview (Page 1)
-        </h3>
-      </div>
-      {loading ? (
-        <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-          Rendering preview…
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="text-center">
-            <p className="text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Original</p>
-            <canvas
-              ref={originalCanvasRef}
-              className="w-full rounded-lg border bg-muted"
-            />
-            <p className="text-xs text-muted-foreground mt-1">{formatBytes(originalSize)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-[10px] font-medium text-primary mb-1.5 uppercase tracking-wider">Compressed</p>
-            <canvas
-              ref={compressedCanvasRef}
-              className="w-full rounded-lg border bg-muted"
-            />
-            <p className="text-xs text-primary font-medium mt-1">{formatBytes(compressedSize)}</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 /* ─── Size Comparison Bar ─── */
@@ -381,8 +253,6 @@ export default function CompressPdf() {
   const [targetSizeMb, setTargetSizeMb] = useState(2);
 
   // UI state
-  const [showPreview, setShowPreview] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [results, setResults] = useState<CompressedResult[]>([]);
@@ -619,7 +489,6 @@ export default function CompressPdf() {
     setStep("upload");
     setProgress(0);
     setResults([]);
-    setShowPreview(false);
   }, []);
 
   const completedSteps = [
@@ -843,44 +712,6 @@ export default function CompressPdf() {
             <SizeComparisonBar
               originalSize={totalOriginalSize}
               estimatedSize={totalEstimatedSize}
-            />
-          )}
-
-          {/* Advanced: quality preview toggle */}
-          <button
-            onClick={() => setAdvancedOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border bg-card text-sm font-medium text-foreground hover:bg-muted/30 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-primary" />
-              Advanced Options
-            </div>
-            {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {advancedOpen && (
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer bg-card border rounded-xl p-4">
-                <input
-                  type="checkbox"
-                  checked={showPreview}
-                  onChange={(e) => setShowPreview(e.target.checked)}
-                  className="accent-primary w-4 h-4"
-                />
-                <div>
-                  <p className="text-sm font-medium text-foreground">Show Quality Preview</p>
-                  <p className="text-xs text-muted-foreground">Compare page 1 before and after compression</p>
-                </div>
-              </label>
-            </div>
-          )}
-
-          {/* Quality preview */}
-          {showPreview && files.length > 0 && (
-            <QualityPreview
-              file={files[0].file}
-              quality={activeQuality}
-              dpi={activeDpi}
             />
           )}
 
