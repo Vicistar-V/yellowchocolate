@@ -7,6 +7,8 @@ import {
   Unlock, Lock, PenTool, EyeOff, GitCompare,
   Languages,
 } from "lucide-react";
+import { NavLink } from "@/components/NavLink";
+import { useLocation } from "react-router-dom";
 
 import {
   Sidebar,
@@ -36,7 +38,7 @@ const toolCategories: ToolCategory[] = [
   {
     label: "Organize PDF",
     items: [
-      { title: "Merge PDF", url: "/merge", icon: FileStack, enabled: false },
+      { title: "Merge PDF", url: "/merge", icon: FileStack, enabled: true },
       { title: "Split PDF", url: "/split", icon: Scissors, enabled: false },
       { title: "Remove Pages", url: "/remove-pages", icon: Trash2, enabled: false },
       { title: "Extract Pages", url: "/extract-pages", icon: FileOutput, enabled: false },
@@ -127,14 +129,23 @@ export function AppSidebar() {
               <SidebarMenu>
                 {category.items.map((item) => (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      disabled={!item.enabled}
-                      className={!item.enabled ? "opacity-40 cursor-not-allowed italic" : ""}
-                      tooltip={item.title}
-                    >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </SidebarMenuButton>
+                    {item.enabled ? (
+                      <SidebarMenuButton asChild tooltip={item.title}>
+                        <NavLink to={item.url} end activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          {!collapsed && <span>{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    ) : (
+                      <SidebarMenuButton
+                        disabled
+                        className="opacity-40 cursor-not-allowed italic"
+                        tooltip={item.title}
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </SidebarMenuButton>
+                    )}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
