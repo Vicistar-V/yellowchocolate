@@ -19,7 +19,7 @@ const App = () => (
         <Layout>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/merge" element={<MergePdf />} />
+            <Route path="/merge-pdf" element={<MergePdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
