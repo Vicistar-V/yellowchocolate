@@ -682,8 +682,8 @@ export default function ScanToPdf() {
   return (
     <ToolPageLayout
       icon={ScanLine}
-      title="Scan to PDF"
-      subtitle="Capture or upload images → enhance → convert to PDF"
+      title="Image to PDF"
+      subtitle="Upload images → enhance → convert to PDF"
       steps={STEPS}
       currentStep={currentStepKey}
       completedSteps={completedSteps}

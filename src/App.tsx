@@ -12,7 +12,7 @@ import SplitPdf from "./pages/SplitPdf";
 import RemovePages from "./pages/RemovePages";
 import ExtractPages from "./pages/ExtractPages";
 import OrganizePages from "./pages/OrganizePages";
-import ScanToPdf from "./pages/ScanToPdf";
+import ImageToPdf from "./pages/ImageToPdf";
 import CompressPdf from "./pages/CompressPdf";
 import RepairPdf from "./pages/RepairPdf";
 
@@ -33,7 +33,7 @@ const App = () => (
             <Route path="/remove-pages" element={<RemovePages />} />
             <Route path="/extract-pages" element={<ExtractPages />} />
             <Route path="/organize" element={<OrganizePages />} />
-            <Route path="/scan-to-pdf" element={<ScanToPdf />} />
+            <Route path="/image-to-pdf" element={<ImageToPdf />} />
             <Route path="/compress" element={<CompressPdf />} />
             <Route path="/repair" element={<RepairPdf />} />
             <Route path="*" element={<NotFound />} />
