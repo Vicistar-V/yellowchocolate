@@ -230,8 +230,7 @@ export default function MergePdf() {
               <FileList
                 files={files}
                 onRemove={handleRemove}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
+                onReorder={setFiles}
               />
 
               {/* Add more files */}
