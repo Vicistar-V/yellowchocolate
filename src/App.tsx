@@ -14,6 +14,7 @@ import ExtractPages from "./pages/ExtractPages";
 import OrganizePages from "./pages/OrganizePages";
 import ScanToPdf from "./pages/ScanToPdf";
 import CompressPdf from "./pages/CompressPdf";
+import RepairPdf from "./pages/RepairPdf";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/organize" element={<OrganizePages />} />
             <Route path="/scan-to-pdf" element={<ScanToPdf />} />
             <Route path="/compress" element={<CompressPdf />} />
+            <Route path="/repair" element={<RepairPdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
