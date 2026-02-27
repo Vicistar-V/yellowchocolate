@@ -40,9 +40,9 @@ const toolCategories: ToolCategory[] = [
     items: [
       { title: "Merge PDF", url: "/merge-pdf", icon: FileStack, enabled: true },
       { title: "Split PDF", url: "/split-pdf", icon: Scissors, enabled: true },
-      { title: "Remove Pages", url: "/remove-pages", icon: Trash2, enabled: false },
-      { title: "Extract Pages", url: "/extract-pages", icon: FileOutput, enabled: false },
-      { title: "Organize PDF", url: "/organize", icon: LayoutList, enabled: false },
+      { title: "Remove Pages", url: "/remove-pages", icon: Trash2, enabled: true },
+      { title: "Extract Pages", url: "/extract-pages", icon: FileOutput, enabled: true },
+      { title: "Organize PDF", url: "/organize", icon: LayoutList, enabled: true },
       { title: "Scan to PDF", url: "/scan", icon: ScanLine, enabled: false },
     ],
   },

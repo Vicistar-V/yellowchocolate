@@ -9,6 +9,9 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import MergePdf from "./pages/MergePdf";
 import SplitPdf from "./pages/SplitPdf";
+import RemovePages from "./pages/RemovePages";
+import ExtractPages from "./pages/ExtractPages";
+import OrganizePages from "./pages/OrganizePages";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +27,9 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/merge-pdf" element={<MergePdf />} />
             <Route path="/split-pdf" element={<SplitPdf />} />
+            <Route path="/remove-pages" element={<RemovePages />} />
+            <Route path="/extract-pages" element={<ExtractPages />} />
+            <Route path="/organize" element={<OrganizePages />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
