@@ -1,12 +1,61 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import {
+  FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Languages,
+} from "lucide-react";
+
+const highlights = [
+  { icon: FileStack, label: "Merge PDF", desc: "Combine multiple PDFs into one" },
+  { icon: Scissors, label: "Split PDF", desc: "Separate pages into new files" },
+  { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly" },
+  { icon: Image, label: "JPG to PDF", desc: "Convert images to PDF" },
+  { icon: FileDown, label: "PDF to WORD", desc: "Extract text to editable docs" },
+  { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation" },
+  { icon: Lock, label: "Protect PDF", desc: "Add password security" },
+  { icon: Languages, label: "Translate PDF", desc: "Translate documents" },
+];
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="flex flex-col items-center px-6 py-16">
+      {/* Hero */}
+      <div className="text-center max-w-2xl mb-16">
+        <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          100% Client-Side · No Uploads
+        </div>
+        <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-4" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          Your PDFs, <br />
+          <span className="text-primary">Your Privacy.</span>
+        </h1>
+        <p className="text-lg text-muted-foreground max-w-md mx-auto">
+          Open-source PDF toolkit that runs entirely in your browser. No file uploads, no servers, no compromises.
+        </p>
       </div>
+
+      {/* Tool Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl w-full">
+        {highlights.map((tool) => (
+          <div
+            key={tool.label}
+            className="group relative bg-card border rounded-xl p-5 flex flex-col items-center text-center gap-3 opacity-50 cursor-not-allowed transition-all"
+          >
+            <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+              <tool.icon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm italic text-muted-foreground">{tool.label}</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">{tool.desc}</p>
+            </div>
+            <span className="absolute top-2 right-2 text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+              Soon
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <p className="mt-16 text-sm text-muted-foreground/60 text-center">
+        Tools will light up as they're built. All processing happens in your browser.
+      </p>
     </div>
   );
 };
