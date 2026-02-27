@@ -1,40 +1,71 @@
 import { Link } from "react-router-dom";
 import {
   FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Languages,
+  Wrench, Zap, ShieldCheck, Globe,
 } from "lucide-react";
 
 const highlights = [
   { icon: FileStack, label: "Merge PDF", desc: "Combine multiple PDFs into one", url: "/merge-pdf", enabled: true },
-  { icon: Scissors, label: "Split PDF", desc: "Separate pages into new files", url: "/split", enabled: false },
-  { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress", enabled: false },
+  { icon: Scissors, label: "Split PDF", desc: "Separate pages into new files", url: "/split-pdf", enabled: false },
+  { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress-pdf", enabled: false },
   { icon: Image, label: "JPG to PDF", desc: "Convert images to PDF", url: "/jpg-to-pdf", enabled: false },
   { icon: FileDown, label: "PDF to WORD", desc: "Extract text to editable docs", url: "/pdf-to-word", enabled: false },
-  { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate", enabled: false },
-  { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect", enabled: false },
-  { icon: Languages, label: "Translate PDF", desc: "Translate documents", url: "/translate", enabled: false },
+  { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate-pdf", enabled: false },
+  { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect-pdf", enabled: false },
+  { icon: Languages, label: "Translate PDF", desc: "Translate documents", url: "/translate-pdf", enabled: false },
+];
+
+const perks = [
+  { icon: ShieldCheck, title: "100% Private", desc: "Everything runs in your browser. Your files never leave your device." },
+  { icon: Zap, title: "Instant Processing", desc: "No waiting for servers. Tools run at the speed of your machine." },
+  { icon: Globe, title: "No Signups", desc: "No accounts, no emails, no tracking. Just open and use." },
+  { icon: Wrench, title: "Growing Toolkit", desc: "PDF tools today, image & text tools tomorrow. Always expanding." },
 ];
 
 const Index = () => {
   return (
     <div className="flex flex-col items-center px-6 py-16">
       {/* Hero */}
-      <div className="text-center max-w-2xl mb-16">
+      <div className="text-center max-w-2xl mb-16 animate-fade-in">
         <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          100% Client-Side · No Uploads
+          100% Client-Side · No Uploads · No Signups
         </div>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-4" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-          Your PDFs, <br />
-          <span className="text-primary">Your Privacy.</span>
+          Free Tools, <br />
+          <span className="text-primary">Zero Compromise.</span>
         </h1>
-        <p className="text-lg text-muted-foreground max-w-md mx-auto">
-          Open-source PDF toolkit that runs entirely in your browser. No file uploads, no servers, no compromises.
+        <p className="text-lg text-muted-foreground max-w-lg mx-auto">
+          Open-source utility toolkit that runs entirely in your browser. PDFs, images, conversions & more — no file uploads, no servers, no accounts.
         </p>
+      </div>
+
+      {/* Perks */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl w-full mb-14">
+        {perks.map((perk, i) => (
+          <div
+            key={perk.title}
+            className="flex flex-col items-center text-center gap-2 p-4 animate-fade-in"
+            style={{ animationDelay: `${i * 100}ms` }}
+          >
+            <perk.icon className="w-6 h-6 text-primary" />
+            <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{perk.title}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{perk.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Section label */}
+      <div className="w-full max-w-3xl mb-5">
+        <h2 className="text-lg font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          Available Tools
+        </h2>
+        <p className="text-sm text-muted-foreground">Click an active tool to get started. More coming soon.</p>
       </div>
 
       {/* Tool Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl w-full">
-        {highlights.map((tool) => {
+        {highlights.map((tool, i) => {
           const content = (
             <>
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${tool.enabled ? "bg-primary/10" : "bg-muted"}`}>
@@ -57,7 +88,8 @@ const Index = () => {
               <Link
                 key={tool.label}
                 to={tool.url}
-                className="group relative bg-card border rounded-xl p-5 flex flex-col items-center text-center gap-3 hover:shadow-lg hover:border-primary/30 hover:scale-[1.03] transition-all duration-200"
+                className="group relative bg-card border rounded-xl p-5 flex flex-col items-center text-center gap-3 hover:shadow-lg hover:border-primary/30 hover:scale-[1.03] transition-all duration-200 animate-fade-in"
+                style={{ animationDelay: `${i * 60}ms` }}
               >
                 {content}
               </Link>
@@ -67,7 +99,8 @@ const Index = () => {
           return (
             <div
               key={tool.label}
-              className="group relative bg-card border rounded-xl p-5 flex flex-col items-center text-center gap-3 opacity-50 cursor-not-allowed transition-all"
+              className="group relative bg-card border rounded-xl p-5 flex flex-col items-center text-center gap-3 opacity-50 cursor-not-allowed transition-all animate-fade-in"
+              style={{ animationDelay: `${i * 60}ms` }}
             >
               {content}
             </div>
@@ -77,7 +110,7 @@ const Index = () => {
 
       {/* Footer note */}
       <p className="mt-16 text-sm text-muted-foreground/60 text-center">
-        Tools will light up as they're built. All processing happens in your browser.
+        Tools light up as they're built. All processing happens in your browser — always.
       </p>
     </div>
   );
