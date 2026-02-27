@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import {
@@ -17,6 +17,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
   import.meta.url
 ).toString();
+
+// Pre-warm the worker by loading a minimal PDF on module init
+let workerWarmedUp = false;
+const warmUpWorker = () => {
+  if (workerWarmedUp) return;
+  workerWarmedUp = true;
+  // Create a minimal valid PDF to force worker initialization
+  PDFDocument.create().then(async (doc) => {
+    doc.addPage();
+    const bytes = await doc.save();
+    const loadTask = pdfjsLib.getDocument({ data: bytes });
+    loadTask.promise.then((pdf) => pdf.destroy()).catch(() => {});
+  }).catch(() => {});
+};
 
 type Step = "upload" | "configure" | "processing" | "done";
 
@@ -257,6 +271,9 @@ export default function CompressPdf() {
   const [progressLabel, setProgressLabel] = useState("");
   const [results, setResults] = useState<CompressedResult[]>([]);
 
+  // Pre-warm worker on mount
+  useEffect(() => { warmUpWorker(); }, []);
+
   // Derived settings
   const activeQuality = mode === "preset" ? PRESETS[preset].quality : customQuality;
   const activeDpi = mode === "preset" ? PRESETS[preset].dpi : customDpi;
@@ -301,55 +318,21 @@ export default function CompressPdf() {
     setStep("configure");
   }, [files]);
 
-  /* ─── Core compression engine ─── */
-  async function compressSinglePdf(
+  /* ─── Lightweight compression: pdf-lib only (no re-render) ─── */
+  async function compressLightweight(
     file: File,
-    quality: number,
-    dpi: number,
     shouldStripMeta: boolean,
-    onPageProgress: (page: number, total: number) => void,
-  ): Promise<CompressedResult> {
+  ): Promise<Blob> {
     const arrayBuffer = await file.arrayBuffer();
-    const srcPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const numPages = srcPdf.numPages;
+    const srcPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
     const outPdf = await PDFDocument.create();
 
-    for (let i = 1; i <= numPages; i++) {
-      const page = await srcPdf.getPage(i);
-      const baseViewport = page.getViewport({ scale: 1 });
-
-      // Scale based on target DPI relative to 72 DPI standard
-      const scale = dpi / 72;
-      const viewport = page.getViewport({ scale });
-
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext("2d")!;
-      await page.render({ canvasContext: ctx, viewport }).promise;
-
-      // Re-encode as JPEG at target quality
-      const jpegBlob = await new Promise<Blob>((resolve) =>
-        canvas.toBlob((b) => resolve(b!), "image/jpeg", quality / 100)
-      );
-      const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
-      const embeddedImage = await outPdf.embedJpg(jpegBytes);
-
-      // Create page at original PDF dimensions (in points)
-      const outPage = outPdf.addPage([baseViewport.width, baseViewport.height]);
-      outPage.drawImage(embeddedImage, {
-        x: 0,
-        y: 0,
-        width: baseViewport.width,
-        height: baseViewport.height,
-      });
-
-      onPageProgress(i, numPages);
+    // Copy all pages (pdf-lib re-serializes, stripping unused objects)
+    const pages = await outPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+    for (const page of pages) {
+      outPdf.addPage(page);
     }
 
-    srcPdf.destroy();
-
-    // Strip metadata if requested
     if (shouldStripMeta) {
       outPdf.setTitle("");
       outPdf.setAuthor("");
@@ -360,13 +343,108 @@ export default function CompressPdf() {
     }
 
     const pdfBytes = await outPdf.save();
-    const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+    return new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+  }
+
+  /* ─── Heavy compression: re-render via pdfjs (rasterize pages) ─── */
+  async function compressRerender(
+    file: File,
+    quality: number,
+    dpi: number,
+    shouldStripMeta: boolean,
+    onPageProgress: (page: number, total: number) => void,
+  ): Promise<Blob> {
+    const arrayBuffer = await file.arrayBuffer();
+    const srcPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = srcPdf.numPages;
+    const outPdf = await PDFDocument.create();
+
+    for (let i = 1; i <= numPages; i++) {
+      const page = await srcPdf.getPage(i);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = dpi / 72;
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d")!;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const jpegBlob = await new Promise<Blob>((resolve) =>
+        canvas.toBlob((b) => resolve(b!), "image/jpeg", quality / 100)
+      );
+      const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+      const embeddedImage = await outPdf.embedJpg(jpegBytes);
+
+      const outPage = outPdf.addPage([baseViewport.width, baseViewport.height]);
+      outPage.drawImage(embeddedImage, {
+        x: 0, y: 0,
+        width: baseViewport.width, height: baseViewport.height,
+      });
+
+      // Clean up canvas
+      canvas.width = 0;
+      canvas.height = 0;
+
+      onPageProgress(i, numPages);
+    }
+
+    srcPdf.destroy();
+
+    if (shouldStripMeta) {
+      outPdf.setTitle("");
+      outPdf.setAuthor("");
+      outPdf.setSubject("");
+      outPdf.setKeywords([]);
+      outPdf.setProducer("");
+      outPdf.setCreator("");
+    }
+
+    const pdfBytes = await outPdf.save();
+    return new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+  }
+
+  /* ─── Smart compression: picks the best strategy ─── */
+  async function compressSinglePdf(
+    file: File,
+    quality: number,
+    dpi: number,
+    shouldStripMeta: boolean,
+    onPageProgress: (page: number, total: number) => void,
+  ): Promise<CompressedResult> {
+    const originalSize = file.size;
+    const pageCount = files.find((f) => f.file === file)?.pageCount ?? 1;
+
+    // Strategy 1: Lightweight (pdf-lib copy + strip) — fast, good for small/text PDFs
+    const lightBlob = await compressLightweight(file, shouldStripMeta);
+
+    // Strategy 2: Re-render — only if file is large enough to benefit (>100KB)
+    let rerenderBlob: Blob | null = null;
+    if (originalSize > 100 * 1024) {
+      rerenderBlob = await compressRerender(file, quality, dpi, shouldStripMeta, onPageProgress);
+    } else {
+      // Still call progress for small files
+      onPageProgress(pageCount, pageCount);
+    }
+
+    // Pick the smallest result, but NEVER return something bigger than original
+    let bestBlob = lightBlob;
+    if (rerenderBlob && rerenderBlob.size < bestBlob.size) {
+      bestBlob = rerenderBlob;
+    }
+
+    // Safety net: if compression made it bigger, return the original
+    if (bestBlob.size >= originalSize) {
+      const originalArrayBuffer = await file.arrayBuffer();
+      bestBlob = new Blob([originalArrayBuffer], { type: "application/pdf" });
+    }
 
     return {
-      blob,
-      originalSize: file.size,
-      compressedSize: blob.size,
-      pageCount: numPages,
+      blob: bestBlob,
+      originalSize,
+      compressedSize: bestBlob.size,
+      pageCount,
       fileName: file.name.replace(/\.pdf$/i, ""),
     };
   }
@@ -455,12 +533,12 @@ export default function CompressPdf() {
         allResults.push(result);
       }
 
-      // Ensure minimum processing time for UX
+      // Ensure minimum processing time for UX (reduced from 2s to 800ms)
       const elapsed = Date.now() - startTime;
-      if (elapsed < 2000) {
+      if (elapsed < 800) {
         setProgress(95);
         setProgressLabel("Finalizing…");
-        await new Promise((r) => setTimeout(r, 2000 - elapsed));
+        await new Promise((r) => setTimeout(r, 800 - elapsed));
       }
 
       setProgress(100);
