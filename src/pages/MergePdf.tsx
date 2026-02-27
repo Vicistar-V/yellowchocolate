@@ -94,6 +94,7 @@ export default function MergePdf() {
   const handleMerge = useCallback(async () => {
     setStep("merging");
     setMergeProgress(0);
+    const startTime = Date.now();
 
     try {
       const mergedPdf = await PDFDocument.create();
@@ -110,6 +111,18 @@ export default function MergePdf() {
 
       const pdfBytes = await mergedPdf.save();
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+      
+      // Ensure at least 2s of loading screen for polished UX
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(2000 - elapsed, 0);
+      if (remaining > 0) {
+        // Animate progress to 100% over remaining time
+        setMergeProgress(90);
+        await new Promise((r) => setTimeout(r, remaining * 0.6));
+        setMergeProgress(100);
+        await new Promise((r) => setTimeout(r, remaining * 0.4));
+      }
+
       setMergedBlob(blob);
       setTotalPages(pagesTotal);
       setStep("done");
