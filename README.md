@@ -1,73 +1,69 @@
-# Welcome to your Lovable project
+# PDF Tools
 
-## Project info
+A browser-based PDF toolkit — merge, arrange, and download PDFs without uploading anything to a server. All processing happens client-side using [pdf-lib](https://github.com/Hopding/pdf-lib).
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- **Merge PDF** — Combine multiple PDFs into a single document with drag-and-drop reordering
+- **Drag & Drop Upload** — Drop files or click to browse, with staggered entrance animations
+- **Sortable File List** — Reorder files via drag-and-drop (desktop & mobile touch support)
+- **100% Client-Side** — No files are uploaded; everything runs in the browser
+- **Reusable Tool Framework** — Generic `src/components/tool/` components make it easy to add new tools
 
-There are several ways of editing your application.
+## Project Structure
 
-**Use Lovable**
+```
+src/
+├── components/
+│   ├── tool/               # Reusable tool page components
+│   │   ├── FileDropZone    # Configurable file upload drop zone
+│   │   ├── FileList        # Sortable file list with DnD
+│   │   ├── ToolPageLayout  # Page shell (header, steps, badges)
+│   │   ├── StepIndicator   # Step progress pills
+│   │   ├── TrustBadges     # Trust signal badges
+│   │   ├── ProcessingView  # Spinner + progress bar
+│   │   ├── SuccessView     # Download + reset screen
+│   │   └── OutputConfig    # Output filename input
+│   └── ui/                 # shadcn/ui primitives
+├── lib/
+│   ├── utils.ts            # Tailwind merge helper
+│   └── file-utils.ts       # formatFileSize, generateId, staggerAddFiles
+├── pages/
+│   ├── Index.tsx           # Home page
+│   └── MergePdf.tsx        # Merge PDF tool
+└── main.tsx
+```
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **React 18** + **TypeScript**
+- **Vite** — dev server & build
+- **Tailwind CSS** + **shadcn/ui** — styling & components
+- **pdf-lib** — client-side PDF manipulation
+- **@dnd-kit** — drag-and-drop sorting
+- **React Router** — client-side routing
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Getting Started
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repo
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start dev server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Adding a New Tool
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+1. Create a new page in `src/pages/` (e.g. `SplitPdf.tsx`)
+2. Import components from `src/components/tool/` — `ToolPageLayout`, `FileDropZone`, `FileList`, etc.
+3. Add your tool-specific logic; the UI framework handles upload, progress, and success states
+4. Register the route in `src/App.tsx`
 
-**Use GitHub Codespaces**
+## Deployment
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Open [Lovable](https://lovable.dev) and click **Share → Publish**, or build locally with `npm run build`.
