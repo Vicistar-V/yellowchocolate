@@ -97,7 +97,7 @@ function SortableItem({ item, index, onRemove }: { item: PdfFileItem; index: num
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="animate-fade-in">
       <FileCard item={item} index={index} onRemove={onRemove} isDragging={isDragging} />
     </div>
   );
