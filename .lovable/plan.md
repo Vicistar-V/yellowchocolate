@@ -1,39 +1,68 @@
 
 
-# Inspection Report: Convert from PDF -- All 5 Converters
+# Inspection Report: Edit PDF -- All 4 Tools
 
-## Verdict: Everything is fully implemented and integrated
+## Verdict: Fully implemented with 1 bug to fix
 
-After a thorough file-by-file inspection, all 5 "Convert from PDF" tools are complete and properly wired up. Here is the full status:
+All 4 Edit PDF tools are complete, with proper routes in `App.tsx`, enabled sidebar entries in `AppSidebar.tsx`, and homepage tiles in `Index.tsx`.
 
-### Integration Points (all correct)
+### Integration Checklist (all correct)
 
 | Check | Status |
 |-------|--------|
-| `App.tsx` routes for all 5 tools | Complete |
-| `AppSidebar.tsx` navigation entries (all enabled) | Complete |
+| `App.tsx` routes for all 4 tools | Complete |
+| `AppSidebar.tsx` sidebar entries (all enabled) | Complete |
 | `Index.tsx` homepage tiles (all enabled) | Complete |
-| `FileDropZone.tsx` extension-matching fix | Already applied |
 
-### Individual Converter Status
+### Individual Tool Status
 
-| Tool | File | Library | Status |
-|------|------|---------|--------|
-| PDF to Image | `PdfToImage.tsx` | pdfjs-dist | Complete -- format selection, DPI, quality, thumbnails, pagination, individual + ZIP download |
-| PDF to Word | `PdfToWord.tsx` | pdfjs-dist + docx | Complete -- text extraction, DOCX generation, batch + ZIP |
-| PDF to PowerPoint | `PdfToPowerPoint.tsx` | pdfjs-dist + pptxgenjs | Complete -- renders pages as slide images, batch + ZIP |
-| PDF to Excel | `PdfToExcel.tsx` | pdfjs-dist + xlsx | Complete -- column detection via X-gap analysis, one sheet per page, batch + ZIP |
-| PDF to PDF/A | `PdfToPdfa.tsx` | pdf-lib | Complete -- XMP metadata + sRGB output intent for PDF/A-1b, batch + ZIP |
+| Tool | File | Status |
+|------|------|--------|
+| Rotate PDF | `RotatePdf.tsx` | Complete -- real-time thumbnail rotation, per-file and batch controls, select/deselect, reset |
+| Add Page Numbers | `AddPageNumbers.tsx` | Complete -- 6 positions, 4 formats, font size, start number, margin controls |
+| Add Watermark | `AddWatermark.tsx` | Complete -- text/image modes, 5 positions, opacity, color, image scale |
+| Crop PDF | `CropPdf.tsx` | Complete -- live preview with red overlay, presets, uniform/independent margins |
 
-### Minor Cleanup (optional)
+### Bug Found: Dynamic Tailwind classes in AddPageNumbers position grid
 
-Only cosmetic issues found -- unused imports that don't affect functionality:
+In `AddPageNumbers.tsx` (line 280), the position selector buttons use dynamically constructed Tailwind classes like:
 
-1. **`PdfToPdfa.tsx` line 2**: Remove unused imports `PDFArray`, `PDFDict`, `PDFHexString`
-2. **`PdfToImage.tsx` line 1**: Remove unused imports `useRef`, `useEffect`
-3. **`PdfToWord.tsx` line 3**: Remove unused import `PageBreak`
+```
+items-${pos.row === "top" ? "start" : "end"}
+justify-${pos.col === "left" ? "start" : pos.col === "right" ? "end" : "center"}
+```
+
+Tailwind's JIT compiler cannot detect dynamically constructed class names. These classes will be purged from the build, meaning the position buttons won't align correctly -- they'll all default to the same position instead of visually representing top-left, top-right, bottom-center, etc.
+
+### Fix
+
+Replace the dynamic class construction with a lookup map that uses full, static class strings:
+
+```typescript
+const alignmentClasses: Record<Position, string> = {
+  "top-left": "items-start justify-start",
+  "top-center": "items-start justify-center",
+  "top-right": "items-start justify-end",
+  "bottom-left": "items-end justify-start",
+  "bottom-center": "items-end justify-center",
+  "bottom-right": "items-end justify-end",
+};
+```
+
+Then use `alignmentClasses[pos.value]` in the button className.
+
+### Unused imports (cosmetic only)
+
+- `RotatePdf.tsx` line 7: `RotateCcwIcon` is imported but never used
+- `AddPageNumbers.tsx` line 55: `FONT_SIZES` is declared but never used
+- `CropPdf.tsx` line 62: `canvasRef` is declared but never used
 
 ### Changes
 
-Clean up the 3 unused imports across the 3 files listed above. No functional changes needed -- everything works.
+| File | Change |
+|------|--------|
+| `src/pages/AddPageNumbers.tsx` | Fix dynamic Tailwind classes with static lookup map |
+| `src/pages/RotatePdf.tsx` | Remove unused `RotateCcwIcon` import |
+| `src/pages/AddPageNumbers.tsx` | Remove unused `FONT_SIZES` constant |
+| `src/pages/CropPdf.tsx` | Remove unused `canvasRef` |
 
