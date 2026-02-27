@@ -1,73 +1,51 @@
 import { useState, useCallback } from "react";
 import { PDFDocument } from "pdf-lib";
-import {
-  FileStack,
-  Plus,
-  Zap,
-  ShieldCheck,
-  ArrowRight,
-  Loader2,
-} from "lucide-react";
-import { FileDropZone } from "@/components/merge/FileDropZone";
-import { FileList, type PdfFileItem } from "@/components/merge/FileList";
-import { MergeConfig, type MergeOptions } from "@/components/merge/MergeConfig";
-import { MergeSuccess } from "@/components/merge/MergeSuccess";
+import { FileStack, Plus, ShieldCheck, Zap, ArrowRight } from "lucide-react";
+import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
+import { FileDropZone } from "@/components/tool/FileDropZone";
+import { FileList } from "@/components/tool/FileList";
+import { OutputConfig, type OutputOptions } from "@/components/tool/OutputConfig";
+import { ProcessingView } from "@/components/tool/ProcessingView";
+import { SuccessView } from "@/components/tool/SuccessView";
+import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
 
 type MergeStep = "upload" | "arrange" | "merging" | "done";
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+const STEPS = [
+  { key: "upload", label: "1. Upload" },
+  { key: "arrange", label: "2. Arrange" },
+  { key: "done", label: "3. Download" },
+];
 
-function generateId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+const TRUST_BADGES = [
+  { icon: ShieldCheck, label: "No uploads" },
+  { icon: Zap, label: "Instant processing" },
+  { icon: FileStack, label: "Unlimited files" },
+] as const;
 
 export default function MergePdf() {
   const [step, setStep] = useState<MergeStep>("upload");
-  const [files, setFiles] = useState<PdfFileItem[]>([]);
+  const [files, setFiles] = useState<FileItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [mergeProgress, setMergeProgress] = useState(0);
   const [mergedBlob, setMergedBlob] = useState<Blob | null>(null);
   const [totalPages, setTotalPages] = useState(0);
-  const [options, setOptions] = useState<MergeOptions>({
-    outputFileName: "merged-document",
-  });
+  const [options, setOptions] = useState<OutputOptions>({ outputFileName: "merged-document" });
 
   const handleFilesSelected = useCallback(
     async (newFiles: File[]) => {
-      const items: PdfFileItem[] = [];
-
+      const items: FileItem[] = [];
       for (const file of newFiles) {
         let pageCount: number | null = null;
         try {
           const buffer = await file.arrayBuffer();
           const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
           pageCount = pdf.getPageCount();
-        } catch {
-          // can't read pages, that's okay
-        }
-
-        items.push({
-          id: generateId(),
-          file,
-          pageCount,
-          sizeFormatted: formatFileSize(file.size),
-        });
+        } catch { /* can't read pages */ }
+        items.push({ id: generateId(), file, pageCount, sizeFormatted: formatFileSize(file.size) });
       }
-
-      // Stagger files in one-by-one, all within 2 seconds max
-      const totalDuration = 2000;
-      const delayPerFile = Math.min(totalDuration / items.length, 400);
-
       if (step === "upload") setStep("arrange");
-
-      for (let i = 0; i < items.length; i++) {
-        if (i > 0) await new Promise((r) => setTimeout(r, delayPerFile));
-        setFiles((prev) => [...prev, items[i]]);
-      }
+      await staggerAddFiles(items, setFiles);
     },
     [step]
   );
@@ -80,33 +58,13 @@ export default function MergePdf() {
     });
   }, []);
 
-  const handleMoveUp = useCallback((index: number) => {
-    if (index === 0) return;
-    setFiles((prev) => {
-      const next = [...prev];
-      [next[index - 1], next[index]] = [next[index], next[index - 1]];
-      return next;
-    });
-  }, []);
-
-  const handleMoveDown = useCallback((index: number) => {
-    setFiles((prev) => {
-      if (index >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[index], next[index + 1]] = [next[index + 1], next[index]];
-      return next;
-    });
-  }, []);
-
   const handleMerge = useCallback(async () => {
     setStep("merging");
     setMergeProgress(0);
     const startTime = Date.now();
-
     try {
       const mergedPdf = await PDFDocument.create();
       let pagesTotal = 0;
-
       for (let i = 0; i < files.length; i++) {
         const buffer = await files[i].file.arrayBuffer();
         const sourcePdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
@@ -115,21 +73,16 @@ export default function MergePdf() {
         pagesTotal += pages.length;
         setMergeProgress(Math.round(((i + 1) / files.length) * 100));
       }
-
       const pdfBytes = await mergedPdf.save();
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
-      
-      // Ensure at least 2s of loading screen for polished UX
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(2000 - elapsed, 0);
       if (remaining > 0) {
-        // Animate progress to 100% over remaining time
         setMergeProgress(90);
         await new Promise((r) => setTimeout(r, remaining * 0.6));
         setMergeProgress(100);
         await new Promise((r) => setTimeout(r, remaining * 0.4));
       }
-
       setMergedBlob(blob);
       setTotalPages(pagesTotal);
       setStep("done");
@@ -157,84 +110,25 @@ export default function MergePdf() {
     setStep("upload");
   }, []);
 
+  const completedSteps = [
+    ...(step !== "upload" ? ["upload"] : []),
+    ...(step === "done" || step === "merging" ? ["arrange"] : []),
+    ...(step === "done" ? ["done"] : []),
+  ];
+
+  const currentStepKey = step === "merging" ? "arrange" : step;
+
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10">
-      {/* Header */}
-      <div className="mb-8 animate-fade-in">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <FileStack className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1
-              className="text-2xl font-bold text-foreground"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            >
-              Merge PDF
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Combine multiple PDFs into a single document
-            </p>
-          </div>
-        </div>
-
-        {/* Steps indicator */}
-        <div className="flex items-center gap-2 mt-5">
-          {[
-            { key: "upload", label: "1. Upload" },
-            { key: "arrange", label: "2. Arrange" },
-            { key: "done", label: "3. Download" },
-          ].map((s, i) => {
-            const isActive =
-              s.key === step ||
-              (s.key === "arrange" && step === "merging");
-            const isDone =
-              (s.key === "upload" && step !== "upload") ||
-              (s.key === "arrange" && (step === "done" || step === "merging")) ||
-              (s.key === "done" && step === "done");
-
-            return (
-              <div key={s.key} className="flex items-center gap-2">
-                {i > 0 && (
-                  <div
-                    className={`w-8 h-0.5 rounded-full transition-colors duration-300 ${
-                      isDone ? "bg-primary" : "bg-border"
-                    }`}
-                  />
-                )}
-                <span
-                  className={`text-xs font-medium px-3 py-1 rounded-full transition-all duration-300 ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : isDone
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {s.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Trust badges */}
-      {step === "upload" && (
-        <div className="flex items-center gap-6 mb-6 text-xs text-muted-foreground animate-fade-in">
-          <span className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-primary" /> No uploads
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-primary" /> Instant processing
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FileStack className="w-3.5 h-3.5 text-primary" /> Unlimited files
-          </span>
-        </div>
-      )}
-
-      {/* Upload step */}
+    <ToolPageLayout
+      icon={FileStack}
+      title="Merge PDF"
+      subtitle="Combine multiple PDFs into a single document"
+      steps={STEPS}
+      currentStep={currentStepKey}
+      completedSteps={completedSteps}
+      trustBadges={[...TRUST_BADGES]}
+      showBadgesOnStep="upload"
+    >
       {(step === "upload" || step === "arrange") && (
         <div className="space-y-5">
           {step === "upload" && (
@@ -242,6 +136,9 @@ export default function MergePdf() {
               onFilesSelected={handleFilesSelected}
               isDragging={isDragging}
               setIsDragging={setIsDragging}
+              accept="application/pdf"
+              title={isDragging ? "Drop your PDFs here!" : "Drag & drop PDF files here"}
+              buttonLabel="Select PDF Files"
             />
           )}
 
@@ -251,19 +148,25 @@ export default function MergePdf() {
                 files={files}
                 onRemove={handleRemove}
                 onReorder={setFiles}
+                headerTitle="Files to merge"
+                headerHint="Drag to reorder · First file = first pages"
               />
 
-              {/* Add more files */}
               <FileDropZone
                 onFilesSelected={handleFilesSelected}
                 isDragging={isDragging}
                 setIsDragging={setIsDragging}
+                accept="application/pdf"
+                title={isDragging ? "Drop your PDFs here!" : "Drag & drop PDF files here"}
+                buttonLabel="Select PDF Files"
               />
 
-              {/* Config */}
-              <MergeConfig options={options} onChange={setOptions} />
+              <OutputConfig
+                options={options}
+                onChange={setOptions}
+                title="Merge Settings"
+              />
 
-              {/* Merge button */}
               <button
                 onClick={handleMerge}
                 disabled={files.length < 2}
@@ -286,41 +189,24 @@ export default function MergePdf() {
         </div>
       )}
 
-      {/* Merging step */}
       {step === "merging" && (
-        <div className="flex flex-col items-center py-16 animate-fade-in">
-          <Loader2 className="w-12 h-12 text-primary animate-spin mb-6" />
-          <h2
-            className="text-xl font-bold text-foreground mb-2"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            Merging your PDFs...
-          </h2>
-          <p className="text-sm text-muted-foreground mb-6">
-            Processing {files.length} files in your browser
-          </p>
-
-          {/* Progress bar */}
-          <div className="w-full max-w-sm h-3 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
-              style={{ width: `${mergeProgress}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">{mergeProgress}%</p>
-        </div>
-      )}
-
-      {/* Done step */}
-      {step === "done" && mergedBlob && (
-        <MergeSuccess
-          fileName={options.outputFileName || "merged"}
-          totalPages={totalPages}
-          fileCount={files.length}
-          onDownload={handleDownload}
-          onReset={handleReset}
+        <ProcessingView
+          title="Merging your PDFs..."
+          subtitle={`Processing ${files.length} files in your browser`}
+          progress={mergeProgress}
         />
       )}
-    </div>
+
+      {step === "done" && mergedBlob && (
+        <SuccessView
+          title="Merge Complete!"
+          description={`${files.length} files merged into <strong>${totalPages} pages</strong>`}
+          fileName={options.outputFileName || "merged"}
+          onDownload={handleDownload}
+          onReset={handleReset}
+          resetLabel="Merge More"
+        />
+      )}
+    </ToolPageLayout>
   );
 }
