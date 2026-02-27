@@ -36,7 +36,13 @@ export function FileDropZone({
         if (accept.endsWith("/*")) {
           return f.type.startsWith(accept.replace("/*", "/"));
         }
-        return accept.split(",").some((a) => f.type === a.trim());
+        return accept.split(",").some((a) => {
+          const token = a.trim();
+          if (token.startsWith(".")) {
+            return f.name.toLowerCase().endsWith(token.toLowerCase());
+          }
+          return f.type === token;
+        });
       });
       if (files.length) onFilesSelected(files);
     },

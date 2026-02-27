@@ -53,8 +53,6 @@ async function parsePptx(buffer: ArrayBuffer): Promise<SlideContent[]> {
 
     // Extract text content from XML
     const texts: string[] = [];
-    const textMatches = xml.matchAll(/<a:t>(.*?)<\/a:t>/g);
-    let currentParagraph = "";
     const paragraphs = xml.split(/<a:p[\s>]/);
 
     for (const para of paragraphs) {
@@ -123,10 +121,12 @@ async function renderSlidesToPdf(
     `;
 
     // Add images first (as background / visual)
+    const blobUrls: string[] = [];
     if (slide.images.length > 0) {
       for (const img of slide.images.slice(0, 2)) {
         const blob = new Blob([img.data.buffer as ArrayBuffer], { type: img.mime });
         const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
         const imgEl = document.createElement("img");
         imgEl.src = url;
         imgEl.style.cssText = "max-width: 100%; max-height: 200px; object-fit: contain; margin: 8px auto; display: block;";
@@ -184,7 +184,7 @@ async function renderSlidesToPdf(
       page.drawImage(img, { x: 0, y: 0, width: pdfW, height: pdfH });
     } finally {
       document.body.removeChild(container);
-      // Clean up blob URLs
+      blobUrls.forEach((u) => URL.revokeObjectURL(u));
     }
 
     onProgress?.(Math.round(((i + 1) / slides.length) * 95));
