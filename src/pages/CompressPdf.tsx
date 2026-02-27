@@ -78,8 +78,8 @@ const PRESETS: Record<PresetLevel, PresetConfig> = {
   low: {
     label: "Low",
     desc: "Minimal compression, near-original quality",
-    quality: 85,
-    dpi: 300,
+    quality: 80,
+    dpi: 200,
     stripMetadata: false,
     icon: "🟢",
     color: "text-green-500",
@@ -87,8 +87,8 @@ const PRESETS: Record<PresetLevel, PresetConfig> = {
   medium: {
     label: "Medium",
     desc: "Balanced quality and file size",
-    quality: 65,
-    dpi: 200,
+    quality: 50,
+    dpi: 150,
     stripMetadata: true,
     icon: "🟡",
     color: "text-yellow-500",
@@ -96,24 +96,24 @@ const PRESETS: Record<PresetLevel, PresetConfig> = {
   high: {
     label: "High",
     desc: "Significant size reduction, good quality",
-    quality: 45,
-    dpi: 150,
+    quality: 30,
+    dpi: 120,
     stripMetadata: true,
     icon: "🟠",
     color: "text-orange-500",
   },
   maximum: {
     label: "Maximum",
-    desc: "Smallest file size, visible quality loss",
-    quality: 25,
-    dpi: 96,
+    desc: "Smallest file size, aggressive compression",
+    quality: 12,
+    dpi: 72,
     stripMetadata: true,
     icon: "🔴",
     color: "text-red-500",
   },
 };
 
-const DPI_OPTIONS = [72, 96, 150, 200, 300] as const;
+const DPI_OPTIONS = [50, 72, 96, 150, 200, 300] as const;
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -124,12 +124,11 @@ function formatBytes(bytes: number): string {
 }
 
 function estimateCompressedSize(originalSize: number, quality: number, dpi: number): number {
-  // Rough heuristic: quality and DPI both scale roughly linearly with output size
   const qualityFactor = quality / 100;
   const dpiFactor = Math.min(dpi / 300, 1);
-  const compression = qualityFactor * dpiFactor;
-  // Most PDFs compress between 10-80% of original
-  const estimated = originalSize * Math.max(0.08, compression * 0.85);
+  // More aggressive estimate: quality and DPI compound
+  const compression = qualityFactor * qualityFactor * dpiFactor;
+  const estimated = originalSize * Math.max(0.05, compression * 0.7);
   return Math.round(estimated);
 }
 
@@ -265,6 +264,7 @@ export default function CompressPdf() {
   const [customQuality, setCustomQuality] = useState(65);
   const [customDpi, setCustomDpi] = useState<number>(200);
   const [stripMetadata, setStripMetadata] = useState(true);
+  const [grayscale, setGrayscale] = useState(false);
   const [targetSizeMb, setTargetSizeMb] = useState(2);
 
   // UI state
@@ -353,6 +353,7 @@ export default function CompressPdf() {
     quality: number,
     dpi: number,
     shouldStripMeta: boolean,
+    useGrayscale: boolean,
     onPageProgress: (page: number, total: number) => void,
   ): Promise<Blob> {
     const arrayBuffer = await file.arrayBuffer();
@@ -370,7 +371,23 @@ export default function CompressPdf() {
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext("2d")!;
+
+      // White background (avoids transparency → black in JPEG)
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // Grayscale conversion for extra compression
+      if (useGrayscale) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let p = 0; p < data.length; p += 4) {
+          const gray = data[p] * 0.299 + data[p + 1] * 0.587 + data[p + 2] * 0.114;
+          data[p] = data[p + 1] = data[p + 2] = gray;
+        }
+        ctx.putImageData(imageData, 0, 0);
+      }
 
       const jpegBlob = await new Promise<Blob>((resolve) =>
         canvas.toBlob((b) => resolve(b!), "image/jpeg", quality / 100)
@@ -412,6 +429,7 @@ export default function CompressPdf() {
     quality: number,
     dpi: number,
     shouldStripMeta: boolean,
+    useGrayscale: boolean,
     onPageProgress: (page: number, total: number) => void,
   ): Promise<CompressedResult> {
     const originalSize = file.size;
@@ -423,7 +441,7 @@ export default function CompressPdf() {
     // Strategy 2: Re-render — only if file is large enough to benefit (>100KB)
     let rerenderBlob: Blob | null = null;
     if (originalSize > 100 * 1024) {
-      rerenderBlob = await compressRerender(file, quality, dpi, shouldStripMeta, onPageProgress);
+      rerenderBlob = await compressRerender(file, quality, dpi, shouldStripMeta, useGrayscale, onPageProgress);
     } else {
       // Still call progress for small files
       onPageProgress(pageCount, pageCount);
@@ -469,7 +487,7 @@ export default function CompressPdf() {
       attempts++;
       onProgress(`Attempt ${attempts}: trying quality ${mid}%`, 20 + attempts * 10);
 
-      const result = await compressSinglePdf(file, mid, dpi, shouldStripMeta, () => {});
+      const result = await compressSinglePdf(file, mid, dpi, shouldStripMeta, true, () => {});
 
       if (result.compressedSize <= targetBytes) {
         bestResult = result;
@@ -482,7 +500,7 @@ export default function CompressPdf() {
     // If we never got under target, use the lowest quality attempt
     if (!bestResult) {
       onProgress("Using maximum compression", 85);
-      bestResult = await compressSinglePdf(file, 5, dpi, shouldStripMeta, () => {});
+      bestResult = await compressSinglePdf(file, 5, dpi, shouldStripMeta, true, () => {});
     }
 
     return bestResult;
@@ -522,6 +540,7 @@ export default function CompressPdf() {
             activeQuality,
             activeDpi,
             activeStripMeta,
+            grayscale,
             (page, total) => {
               const filePct = (fi / files.length) * 100;
               const pagePct = (page / total) * (80 / files.length);
@@ -562,7 +581,7 @@ export default function CompressPdf() {
       toast.error("Compression failed", { description: "Something went wrong while processing your PDF." });
       setStep("configure");
     }
-  }, [files, mode, preset, activeQuality, activeDpi, activeStripMeta, targetSizeMb]);
+  }, [files, mode, preset, activeQuality, activeDpi, activeStripMeta, grayscale, targetSizeMb]);
 
   const handleDownload = useCallback(() => {
     for (const result of results) {
@@ -760,6 +779,26 @@ export default function CompressPdf() {
                 <div>
                   <p className="text-sm font-medium text-foreground">Strip Metadata</p>
                   <p className="text-xs text-muted-foreground">Remove author, title, timestamps</p>
+                </div>
+              </label>
+
+              {/* Grayscale */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  className={`w-10 h-6 rounded-full transition-colors relative ${
+                    grayscale ? "bg-primary" : "bg-muted"
+                  }`}
+                  onClick={() => setGrayscale((v) => !v)}
+                >
+                  <div
+                    className={`absolute top-1 w-4 h-4 rounded-full bg-primary-foreground shadow-sm transition-transform ${
+                      grayscale ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Grayscale</p>
+                  <p className="text-xs text-muted-foreground">Convert to black & white for extra compression</p>
                 </div>
               </label>
             </div>
