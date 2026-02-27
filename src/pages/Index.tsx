@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import {
   FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Languages,
   Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList,
+  FileText, Table, Presentation, Code,
 } from "lucide-react";
 
 const highlights = [
@@ -13,6 +14,10 @@ const highlights = [
   { icon: Image, label: "Image to PDF", desc: "Convert images to PDF", url: "/image-to-pdf", enabled: true },
   { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress", enabled: true },
   { icon: Wrench, label: "Repair PDF", desc: "Fix corrupted or broken PDFs", url: "/repair", enabled: true },
+  { icon: FileText, label: "Word to PDF", desc: "Convert DOCX & DOC files", url: "/word-to-pdf", enabled: true },
+  { icon: Presentation, label: "PowerPoint to PDF", desc: "Convert presentations", url: "/ppt-to-pdf", enabled: true },
+  { icon: Table, label: "Excel to PDF", desc: "Convert spreadsheets", url: "/excel-to-pdf", enabled: true },
+  { icon: Code, label: "HTML to PDF", desc: "Convert web pages", url: "/html-to-pdf", enabled: true },
   { icon: FileDown, label: "PDF to WORD", desc: "Extract text to editable docs", url: "/pdf-to-word", enabled: false },
   { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate-pdf", enabled: false },
   { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect-pdf", enabled: false },
