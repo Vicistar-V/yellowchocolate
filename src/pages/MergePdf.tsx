@@ -34,7 +34,6 @@ export default function MergePdf() {
   const [totalPages, setTotalPages] = useState(0);
   const [options, setOptions] = useState<MergeOptions>({
     outputFileName: "merged-document",
-    addBookmarks: true,
   });
 
   const handleFilesSelected = useCallback(
