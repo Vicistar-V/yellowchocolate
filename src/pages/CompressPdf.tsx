@@ -545,6 +545,18 @@ export default function CompressPdf() {
       setProgress(100);
       setResults(allResults);
       setStep("done");
+
+      // Notify if any files couldn't be reduced
+      const unchangedFiles = allResults.filter((r) => r.compressedSize >= r.originalSize);
+      if (unchangedFiles.length > 0) {
+        const names = unchangedFiles.map((r) => r.fileName).join(", ");
+        toast.info("Already optimized", {
+          description: unchangedFiles.length === allResults.length
+            ? "Your PDF is already optimally compressed — no further reduction possible."
+            : `${names} couldn't be reduced further and were kept at original size.`,
+          duration: 6000,
+        });
+      }
     } catch (err) {
       console.error("Compression failed:", err);
       toast.error("Compression failed", { description: "Something went wrong while processing your PDF." });
