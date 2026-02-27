@@ -4,6 +4,7 @@ import {
   Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList,
   FileText, Table, Presentation, Code,
   ImageDown, PresentationIcon, TableProperties, Shield,
+  Hash, Droplets, Crop,
 } from "lucide-react";
 
 const highlights = [
@@ -24,7 +25,10 @@ const highlights = [
   { icon: PresentationIcon, label: "PDF to PowerPoint", desc: "Convert pages to slides", url: "/pdf-to-ppt", enabled: true },
   { icon: TableProperties, label: "PDF to Excel", desc: "Extract tables & data", url: "/pdf-to-excel", enabled: true },
   { icon: Shield, label: "PDF to PDF/A", desc: "Archival-compliant conversion", url: "/pdf-to-pdfa", enabled: true },
-  { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate-pdf", enabled: false },
+  { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate", enabled: true },
+  { icon: Hash, label: "Add Page Numbers", desc: "Number your pages", url: "/page-numbers", enabled: true },
+  { icon: Droplets, label: "Add Watermark", desc: "Stamp text or images", url: "/watermark", enabled: true },
+  { icon: Crop, label: "Crop PDF", desc: "Trim page margins", url: "/crop", enabled: true },
   { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect-pdf", enabled: false },
   { icon: Languages, label: "Translate PDF", desc: "Translate documents", url: "/translate-pdf", enabled: false },
 ];
