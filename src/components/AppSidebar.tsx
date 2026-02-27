@@ -1,6 +1,6 @@
 import {
-  FileStack, Scissors, Trash2, FileOutput, LayoutList, ScanLine,
-  Minimize2, Wrench, ScanText,
+  FileStack, Scissors, Trash2, FileOutput, LayoutList,
+  Minimize2, Wrench,
   Image, FileText, Presentation, Table, Code,
   ImageDown, FileDown, PresentationIcon, TableProperties, Shield,
   RotateCw, Hash, Droplets, Crop, Pencil,
@@ -43,7 +43,6 @@ const toolCategories: ToolCategory[] = [
       { title: "Remove Pages", url: "/remove-pages", icon: Trash2, enabled: true },
       { title: "Extract Pages", url: "/extract-pages", icon: FileOutput, enabled: true },
       { title: "Organize PDF", url: "/organize", icon: LayoutList, enabled: true },
-      { title: "Scan to PDF", url: "/scan-to-pdf", icon: ScanLine, enabled: true },
     ],
   },
   {
@@ -51,13 +50,12 @@ const toolCategories: ToolCategory[] = [
     items: [
       { title: "Compress PDF", url: "/compress", icon: Minimize2, enabled: true },
       { title: "Repair PDF", url: "/repair", icon: Wrench, enabled: true },
-      { title: "OCR PDF", url: "/ocr", icon: ScanText, enabled: false },
     ],
   },
   {
     label: "Convert to PDF",
     items: [
-      { title: "JPG to PDF", url: "/jpg-to-pdf", icon: Image, enabled: false },
+      { title: "Image to PDF", url: "/image-to-pdf", icon: Image, enabled: true },
       { title: "WORD to PDF", url: "/word-to-pdf", icon: FileText, enabled: false },
       { title: "POWERPOINT to PDF", url: "/ppt-to-pdf", icon: Presentation, enabled: false },
       { title: "EXCEL to PDF", url: "/excel-to-pdf", icon: Table, enabled: false },
