@@ -438,7 +438,7 @@ function LargePreview({ page }: { page: ScannedPage }) {
 }
 
 /* ─── Main Component ─── */
-export default function ScanToPdf() {
+export default function ImageToPdf() {
   const [step, setStep] = useState<Step>("capture");
   const [pages, setPages] = useState<ScannedPage[]>([]);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -645,7 +645,7 @@ export default function ScanToPdf() {
       setResultStats(`<strong>${pages.length} page${pages.length !== 1 ? "s" : ""}</strong> scanned to PDF`);
       setStep("done");
     } catch (err) {
-      console.error("Scan to PDF failed:", err);
+      console.error("Image to PDF failed:", err);
       toast.error("Processing failed", { description: "Something went wrong while creating your PDF." });
       setStep("configure");
     }
