@@ -4,7 +4,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 import {
   RotateCw, RotateCcw, ShieldCheck, Zap, ArrowRight, Files,
-  Download, Trash2, FileText, RefreshCw, CheckCircle2, RotateCcwIcon,
+  Download, Trash2, FileText, RefreshCw, CheckCircle2,
 } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
 import { FileDropZone } from "@/components/tool/FileDropZone";

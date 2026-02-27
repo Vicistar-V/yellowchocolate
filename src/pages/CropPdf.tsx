@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
@@ -59,7 +59,7 @@ export default function CropPdf() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pageWidth, setPageWidth] = useState(612); // letter size default
   const [pageHeight, setPageHeight] = useState(792);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
 
   // Generate preview from first page of first file
   const generatePreview = useCallback(async () => {
