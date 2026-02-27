@@ -32,14 +32,12 @@ export default function MergePdf() {
   const [mergeProgress, setMergeProgress] = useState(0);
   const [mergedBlob, setMergedBlob] = useState<Blob | null>(null);
   const [totalPages, setTotalPages] = useState(0);
-  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [options, setOptions] = useState<MergeOptions>({
     outputFileName: "merged-document",
   });
 
   const handleFilesSelected = useCallback(
     async (newFiles: File[]) => {
-      setIsProcessingFiles(true);
       const items: PdfFileItem[] = [];
 
       for (const file of newFiles) {
@@ -60,12 +58,16 @@ export default function MergePdf() {
         });
       }
 
-      // Brief delay so user sees the processing state
-      await new Promise((r) => setTimeout(r, 600));
+      // Stagger files in one-by-one, all within 2 seconds max
+      const totalDuration = 2000;
+      const delayPerFile = Math.min(totalDuration / items.length, 400);
 
-      setFiles((prev) => [...prev, ...items]);
-      setIsProcessingFiles(false);
       if (step === "upload") setStep("arrange");
+
+      for (let i = 0; i < items.length; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, delayPerFile));
+        setFiles((prev) => [...prev, items[i]]);
+      }
     },
     [step]
   );
@@ -236,23 +238,11 @@ export default function MergePdf() {
       {(step === "upload" || step === "arrange") && (
         <div className="space-y-5">
           {step === "upload" && (
-            isProcessingFiles ? (
-              <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
-                <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                <div className="text-center">
-                  <p className="font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Reading your PDFs...
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">Analyzing pages & metadata</p>
-                </div>
-              </div>
-            ) : (
-              <FileDropZone
-                onFilesSelected={handleFilesSelected}
-                isDragging={isDragging}
-                setIsDragging={setIsDragging}
-              />
-            )
+            <FileDropZone
+              onFilesSelected={handleFilesSelected}
+              isDragging={isDragging}
+              setIsDragging={setIsDragging}
+            />
           )}
 
           {step === "arrange" && (
