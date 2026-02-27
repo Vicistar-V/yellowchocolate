@@ -9,6 +9,7 @@ import { OutputConfig, type OutputOptions } from "@/components/tool/OutputConfig
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize } from "@/lib/file-utils";
+import { toast } from "sonner";
 
 type Step = "upload" | "configure" | "processing" | "done";
 
@@ -49,7 +50,7 @@ export default function ExtractPages() {
       setOptions({ outputFileName: file.name.replace(/\.pdf$/i, "") + "-extracted" });
       setStep("configure");
     } catch {
-      console.error("Could not read PDF");
+      toast.error("Could not read PDF", { description: "The file may be corrupt or not a valid PDF." });
     }
   }, []);
 
@@ -104,6 +105,7 @@ export default function ExtractPages() {
       setStep("done");
     } catch (err) {
       console.error("Extract failed:", err);
+      toast.error("Processing failed", { description: "Something went wrong while extracting pages." });
       setStep("configure");
     }
   }, [sourceFile, selectedPages, pageCount, options.outputFileName]);

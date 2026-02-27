@@ -19,7 +19,8 @@ import { FileDropZone } from "@/components/tool/FileDropZone";
 import { OutputConfig, type OutputOptions } from "@/components/tool/OutputConfig";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
-import { formatFileSize } from "@/lib/file-utils";
+import { formatFileSize, generateId } from "@/lib/file-utils";
+import { toast } from "sonner";
 
 type Step = "upload" | "configure" | "processing" | "done";
 
@@ -28,11 +29,6 @@ interface PageItem {
   sourceIndex: number; // 0-based index in original PDF
   rotation: number; // 0, 90, 180, 270
   label: string; // display label
-}
-
-let nextId = 1;
-function makeId() {
-  return `page-${nextId++}`;
 }
 
 const STEPS = [
@@ -189,7 +185,7 @@ export default function OrganizePages() {
       setOriginalPageCount(count);
       setPages(
         Array.from({ length: count }, (_, i) => ({
-          id: makeId(),
+          id: generateId(),
           sourceIndex: i,
           rotation: 0,
           label: `Page ${i + 1}`,
@@ -198,7 +194,7 @@ export default function OrganizePages() {
       setOptions({ outputFileName: file.name.replace(/\.pdf$/i, "") + "-organized" });
       setStep("configure");
     } catch {
-      console.error("Could not read PDF");
+      toast.error("Could not read PDF", { description: "The file may be corrupt or not a valid PDF." });
     }
   }, []);
 
@@ -214,7 +210,7 @@ export default function OrganizePages() {
       if (idx === -1) return prev;
       const source = prev[idx];
       const copy: PageItem = {
-        id: makeId(),
+        id: generateId(),
         sourceIndex: source.sourceIndex,
         rotation: source.rotation,
         label: `${source.label} (copy)`,
@@ -291,6 +287,7 @@ export default function OrganizePages() {
       setStep("done");
     } catch (err) {
       console.error("Organize failed:", err);
+      toast.error("Processing failed", { description: "Something went wrong while organizing your PDF." });
       setStep("configure");
     }
   }, [sourceFile, pages, options.outputFileName, rotatedCount, duplicatedCount]);
