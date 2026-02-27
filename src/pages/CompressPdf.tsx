@@ -3,7 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import {
   Minimize2, ShieldCheck, Zap, ArrowRight, Upload, FileDown,
-  Gauge, Settings2, Target, Trash2, Info, BarChart3,
+  Gauge, Settings2, Target, Trash2, Info,
   FileText,
 } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
@@ -113,8 +113,6 @@ const PRESETS: Record<PresetLevel, PresetConfig> = {
   },
 };
 
-const DPI_OPTIONS = [50, 72, 96, 150, 200, 300] as const;
-
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -123,62 +121,13 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function estimateCompressedSize(originalSize: number, quality: number, dpi: number): number {
-  const qualityFactor = quality / 100;
-  const dpiFactor = Math.min(dpi / 300, 1);
-  // More aggressive estimate: quality and DPI compound
-  const compression = qualityFactor * qualityFactor * dpiFactor;
-  const estimated = originalSize * Math.max(0.05, compression * 0.7);
-  return Math.round(estimated);
-}
-
-/* ─── Size Comparison Bar ─── */
-function SizeComparisonBar({
-  originalSize,
-  estimatedSize,
-}: {
-  originalSize: number;
-  estimatedSize: number;
-}) {
-  const reduction = Math.max(0, Math.round((1 - estimatedSize / originalSize) * 100));
-  const barWidth = Math.max(5, Math.round((estimatedSize / originalSize) * 100));
-
-  return (
-    <div className="bg-card border rounded-xl p-4 animate-fade-in">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            Estimated Result
-          </span>
-        </div>
-        <span className="text-sm font-bold text-primary">-{reduction}%</span>
-      </div>
-      <div className="space-y-2">
-        <div>
-          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>Original</span>
-            <span>{formatBytes(originalSize)}</span>
-          </div>
-          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full bg-muted-foreground/30 w-full" />
-          </div>
-        </div>
-        <div>
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-primary font-medium">Compressed</span>
-            <span className="text-primary font-medium">~{formatBytes(estimatedSize)}</span>
-          </div>
-          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${barWidth}%` }}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+/** Derive DPI from quality level automatically */
+function dpiFromQuality(quality: number): number {
+  if (quality <= 15) return 72;
+  if (quality <= 35) return 96;
+  if (quality <= 55) return 120;
+  if (quality <= 75) return 150;
+  return 200;
 }
 
 /* ─── After-Compression Stats ─── */
@@ -216,13 +165,10 @@ function CompressionStats({ results }: { results: CompressedResult[] }) {
 function FileCard({
   info,
   onRemove,
-  estimatedSize,
 }: {
   info: PdfFileInfo;
   onRemove: () => void;
-  estimatedSize: number;
 }) {
-  const reduction = Math.max(0, Math.round((1 - estimatedSize / info.sizeBytes) * 100));
   return (
     <div className="flex items-center gap-3 bg-card border rounded-xl px-4 py-3 group hover:shadow-md transition-all animate-fade-in">
       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -236,8 +182,6 @@ function FileCard({
           <span>{formatBytes(info.sizeBytes)}</span>
           <span>·</span>
           <span>{info.pageCount} page{info.pageCount !== 1 ? "s" : ""}</span>
-          <span>·</span>
-          <span className="text-primary font-medium">→ ~{formatBytes(estimatedSize)} (-{reduction}%)</span>
         </div>
       </div>
       <button
@@ -262,8 +206,6 @@ export default function CompressPdf() {
   const [mode, setMode] = useState<CompressionMode>("preset");
   const [preset, setPreset] = useState<PresetLevel>("medium");
   const [customQuality, setCustomQuality] = useState(65);
-  const [customDpi, setCustomDpi] = useState<number>(200);
-  const [stripMetadata, setStripMetadata] = useState(true);
   const [grayscale, setGrayscale] = useState(false);
   const [targetSizeMb, setTargetSizeMb] = useState(2);
 
@@ -275,16 +217,11 @@ export default function CompressPdf() {
   // Pre-warm worker on mount
   useEffect(() => { warmUpWorker(); }, []);
 
-  // Derived settings
+  // Derived settings — DPI is auto-derived from quality
   const activeQuality = mode === "preset" ? PRESETS[preset].quality : customQuality;
-  const activeDpi = mode === "preset" ? PRESETS[preset].dpi : customDpi;
-  const activeStripMeta = mode === "preset" ? PRESETS[preset].stripMetadata : stripMetadata;
+  const activeDpi = mode === "preset" ? PRESETS[preset].dpi : dpiFromQuality(customQuality);
 
   const totalOriginalSize = useMemo(() => files.reduce((a, f) => a + f.sizeBytes, 0), [files]);
-  const totalEstimatedSize = useMemo(
-    () => files.reduce((a, f) => a + estimateCompressedSize(f.sizeBytes, activeQuality, activeDpi), 0),
-    [files, activeQuality, activeDpi]
-  );
 
   const handleFilesSelected = useCallback(async (selectedFiles: File[]) => {
     const pdfFiles = selectedFiles.filter((f) => f.type === "application/pdf");
@@ -528,7 +465,7 @@ export default function CompressPdf() {
             fileInfo.file,
             targetBytes,
             activeDpi,
-            activeStripMeta,
+            true,
             (msg, pct) => {
               setProgressLabel(`${fileLabel}${msg}`);
               setProgress(Math.round((fi / files.length) * 100 + pct / files.length));
@@ -539,7 +476,7 @@ export default function CompressPdf() {
             fileInfo.file,
             activeQuality,
             activeDpi,
-            activeStripMeta,
+            true,
             grayscale,
             (page, total) => {
               const filePct = (fi / files.length) * 100;
@@ -581,7 +518,7 @@ export default function CompressPdf() {
       toast.error("Compression failed", { description: "Something went wrong while processing your PDF." });
       setStep("configure");
     }
-  }, [files, mode, preset, activeQuality, activeDpi, activeStripMeta, grayscale, targetSizeMb]);
+  }, [files, mode, preset, activeQuality, activeDpi, grayscale, targetSizeMb]);
 
   const handleDownload = useCallback(() => {
     for (const result of results) {
@@ -644,7 +581,6 @@ export default function CompressPdf() {
                   key={`${f.file.name}-${i}`}
                   info={f}
                   onRemove={() => handleRemoveFile(i)}
-                  estimatedSize={estimateCompressedSize(f.sizeBytes, activeQuality, activeDpi)}
                 />
               ))}
               <button
@@ -742,46 +678,6 @@ export default function CompressPdf() {
                 </div>
               </div>
 
-              {/* DPI */}
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 block">Resolution (DPI)</label>
-                <div className="flex gap-2">
-                  {DPI_OPTIONS.map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setCustomDpi(d)}
-                      className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
-                        customDpi === d
-                          ? "bg-primary text-primary-foreground shadow-md"
-                          : "bg-muted text-muted-foreground hover:bg-muted/80"
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Strip metadata */}
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div
-                  className={`w-10 h-6 rounded-full transition-colors relative ${
-                    stripMetadata ? "bg-primary" : "bg-muted"
-                  }`}
-                  onClick={() => setStripMetadata((v) => !v)}
-                >
-                  <div
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-primary-foreground shadow-sm transition-transform ${
-                      stripMetadata ? "translate-x-5" : "translate-x-1"
-                    }`}
-                  />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Strip Metadata</p>
-                  <p className="text-xs text-muted-foreground">Remove author, title, timestamps</p>
-                </div>
-              </label>
-
               {/* Grayscale */}
               <label className="flex items-center gap-3 cursor-pointer">
                 <div
@@ -839,14 +735,6 @@ export default function CompressPdf() {
                 </span>
               </div>
             </div>
-          )}
-
-          {/* Size estimation bar */}
-          {mode !== "target" && files.length > 0 && (
-            <SizeComparisonBar
-              originalSize={totalOriginalSize}
-              estimatedSize={totalEstimatedSize}
-            />
           )}
 
           {/* File list summary */}
