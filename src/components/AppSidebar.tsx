@@ -49,7 +49,7 @@ const toolCategories: ToolCategory[] = [
   {
     label: "Optimize PDF",
     items: [
-      { title: "Compress PDF", url: "/compress", icon: Minimize2, enabled: false },
+      { title: "Compress PDF", url: "/compress", icon: Minimize2, enabled: true },
       { title: "Repair PDF", url: "/repair", icon: Wrench, enabled: false },
       { title: "OCR PDF", url: "/ocr", icon: ScanText, enabled: false },
     ],

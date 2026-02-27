@@ -11,7 +11,7 @@ const highlights = [
   { icon: FileOutput, label: "Extract Pages", desc: "Pull specific pages out", url: "/extract-pages", enabled: true },
   { icon: LayoutList, label: "Organize Pages", desc: "Reorder, rotate & duplicate", url: "/organize", enabled: true },
   { icon: ScanLine, label: "Scan to PDF", desc: "Camera or images to PDF", url: "/scan-to-pdf", enabled: true },
-  { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress-pdf", enabled: false },
+  { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress", enabled: true },
   { icon: Image, label: "JPG to PDF", desc: "Convert images to PDF", url: "/jpg-to-pdf", enabled: false },
   { icon: FileDown, label: "PDF to WORD", desc: "Extract text to editable docs", url: "/pdf-to-word", enabled: false },
   { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate-pdf", enabled: false },

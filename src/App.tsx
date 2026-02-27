@@ -13,6 +13,7 @@ import RemovePages from "./pages/RemovePages";
 import ExtractPages from "./pages/ExtractPages";
 import OrganizePages from "./pages/OrganizePages";
 import ScanToPdf from "./pages/ScanToPdf";
+import CompressPdf from "./pages/CompressPdf";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/extract-pages" element={<ExtractPages />} />
             <Route path="/organize" element={<OrganizePages />} />
             <Route path="/scan-to-pdf" element={<ScanToPdf />} />
+            <Route path="/compress" element={<CompressPdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
