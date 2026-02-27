@@ -15,6 +15,10 @@ import OrganizePages from "./pages/OrganizePages";
 import ImageToPdf from "./pages/ImageToPdf";
 import CompressPdf from "./pages/CompressPdf";
 import RepairPdf from "./pages/RepairPdf";
+import WordToPdf from "./pages/WordToPdf";
+import ExcelToPdf from "./pages/ExcelToPdf";
+import PowerPointToPdf from "./pages/PowerPointToPdf";
+import HtmlToPdf from "./pages/HtmlToPdf";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +40,10 @@ const App = () => (
             <Route path="/image-to-pdf" element={<ImageToPdf />} />
             <Route path="/compress" element={<CompressPdf />} />
             <Route path="/repair" element={<RepairPdf />} />
+            <Route path="/word-to-pdf" element={<WordToPdf />} />
+            <Route path="/excel-to-pdf" element={<ExcelToPdf />} />
+            <Route path="/ppt-to-pdf" element={<PowerPointToPdf />} />
+            <Route path="/html-to-pdf" element={<HtmlToPdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

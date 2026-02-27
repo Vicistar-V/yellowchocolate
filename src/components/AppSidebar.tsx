@@ -56,10 +56,10 @@ const toolCategories: ToolCategory[] = [
     label: "Convert to PDF",
     items: [
       { title: "Image to PDF", url: "/image-to-pdf", icon: Image, enabled: true },
-      { title: "WORD to PDF", url: "/word-to-pdf", icon: FileText, enabled: false },
-      { title: "POWERPOINT to PDF", url: "/ppt-to-pdf", icon: Presentation, enabled: false },
-      { title: "EXCEL to PDF", url: "/excel-to-pdf", icon: Table, enabled: false },
-      { title: "HTML to PDF", url: "/html-to-pdf", icon: Code, enabled: false },
+      { title: "WORD to PDF", url: "/word-to-pdf", icon: FileText, enabled: true },
+      { title: "POWERPOINT to PDF", url: "/ppt-to-pdf", icon: Presentation, enabled: true },
+      { title: "EXCEL to PDF", url: "/excel-to-pdf", icon: Table, enabled: true },
+      { title: "HTML to PDF", url: "/html-to-pdf", icon: Code, enabled: true },
     ],
   },
   {
