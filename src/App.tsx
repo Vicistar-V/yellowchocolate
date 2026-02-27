@@ -19,6 +19,11 @@ import WordToPdf from "./pages/WordToPdf";
 import ExcelToPdf from "./pages/ExcelToPdf";
 import PowerPointToPdf from "./pages/PowerPointToPdf";
 import HtmlToPdf from "./pages/HtmlToPdf";
+import PdfToImage from "./pages/PdfToImage";
+import PdfToWord from "./pages/PdfToWord";
+import PdfToPowerPoint from "./pages/PdfToPowerPoint";
+import PdfToExcel from "./pages/PdfToExcel";
+import PdfToPdfa from "./pages/PdfToPdfa";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +49,11 @@ const App = () => (
             <Route path="/excel-to-pdf" element={<ExcelToPdf />} />
             <Route path="/ppt-to-pdf" element={<PowerPointToPdf />} />
             <Route path="/html-to-pdf" element={<HtmlToPdf />} />
+            <Route path="/pdf-to-image" element={<PdfToImage />} />
+            <Route path="/pdf-to-word" element={<PdfToWord />} />
+            <Route path="/pdf-to-ppt" element={<PdfToPowerPoint />} />
+            <Route path="/pdf-to-excel" element={<PdfToExcel />} />
+            <Route path="/pdf-to-pdfa" element={<PdfToPdfa />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

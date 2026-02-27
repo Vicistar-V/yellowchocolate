@@ -3,6 +3,7 @@ import {
   FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Languages,
   Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList,
   FileText, Table, Presentation, Code,
+  ImageDown, PresentationIcon, TableProperties, Shield,
 } from "lucide-react";
 
 const highlights = [
@@ -18,7 +19,11 @@ const highlights = [
   { icon: Presentation, label: "PowerPoint to PDF", desc: "Convert presentations", url: "/ppt-to-pdf", enabled: true },
   { icon: Table, label: "Excel to PDF", desc: "Convert spreadsheets", url: "/excel-to-pdf", enabled: true },
   { icon: Code, label: "HTML to PDF", desc: "Convert web pages", url: "/html-to-pdf", enabled: true },
-  { icon: FileDown, label: "PDF to WORD", desc: "Extract text to editable docs", url: "/pdf-to-word", enabled: false },
+  { icon: ImageDown, label: "PDF to Image", desc: "Convert pages to JPG/PNG/WebP", url: "/pdf-to-image", enabled: true },
+  { icon: FileDown, label: "PDF to Word", desc: "Extract text to editable docs", url: "/pdf-to-word", enabled: true },
+  { icon: PresentationIcon, label: "PDF to PowerPoint", desc: "Convert pages to slides", url: "/pdf-to-ppt", enabled: true },
+  { icon: TableProperties, label: "PDF to Excel", desc: "Extract tables & data", url: "/pdf-to-excel", enabled: true },
+  { icon: Shield, label: "PDF to PDF/A", desc: "Archival-compliant conversion", url: "/pdf-to-pdfa", enabled: true },
   { icon: RotateCw, label: "Rotate PDF", desc: "Fix page orientation", url: "/rotate-pdf", enabled: false },
   { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect-pdf", enabled: false },
   { icon: Languages, label: "Translate PDF", desc: "Translate documents", url: "/translate-pdf", enabled: false },
