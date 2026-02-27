@@ -257,6 +257,7 @@ export default function CompressPdf() {
   const [step, setStep] = useState<Step>("upload");
   const [files, setFiles] = useState<PdfFileInfo[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
 
   // Compression settings
   const [mode, setMode] = useState<CompressionMode>("preset");
@@ -295,13 +296,13 @@ export default function CompressPdf() {
     for (const file of pdfFiles) {
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        // Use pdf-lib for page counting (faster & more reliable than pdfjs after heavy use)
+        const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
         const info: PdfFileInfo = {
           file,
-          pageCount: pdf.numPages,
+          pageCount: pdfDoc.getPageCount(),
           sizeBytes: file.size,
         };
-        pdf.destroy();
         setFiles((prev) => [...prev, info]);
       } catch {
         toast.error("Failed to read PDF", { description: file.name });
@@ -566,7 +567,10 @@ export default function CompressPdf() {
     setFiles([]);
     setStep("upload");
     setProgress(0);
+    setProgressLabel("");
     setResults([]);
+    setIsDragging(false);
+    setResetKey((k) => k + 1);
   }, []);
 
   const completedSteps = [
@@ -591,6 +595,7 @@ export default function CompressPdf() {
       {step === "upload" && (
         <div className="space-y-4 animate-fade-in">
           <FileDropZone
+            key={resetKey}
             onFilesSelected={handleFilesSelected}
             isDragging={isDragging}
             setIsDragging={setIsDragging}
