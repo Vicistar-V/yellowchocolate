@@ -1,41 +1,45 @@
 
 
-# Fix: Complete Integration of All PDF Tools
+# Fix: Complete Integration of All 4 Converters
 
-## Issues Found
+## Critical Bug Found
 
-1. **Homepage (Index.tsx) is outdated** -- Split PDF is marked `enabled: false` and the 3 new tools (Remove Pages, Extract Pages, Organize Pages) are missing entirely from the homepage grid.
+The drag-and-drop functionality is broken for Word, Excel, PowerPoint, and HTML converters. Files can only be added via the click-to-browse button -- dragging files onto the drop zone silently rejects them.
 
-2. **Global mutable ID counter in OrganizePages** -- The `let nextId = 1` at module scope won't reset between navigations, which can cause unexpected behavior. Should use a ref or inline ID generation.
-
-3. **Silent PDF load failures** -- All three new tools catch PDF read errors with only `console.error`. Users get zero feedback when they upload a corrupt or non-PDF file. Should show a toast notification.
-
----
+**Root cause**: `FileDropZone.tsx` line 39 filters dropped files by comparing `f.type` (a MIME type like `application/pdf`) against each comma-separated token in the `accept` prop. But the new converters pass accept strings containing file extensions (`.docx`, `.xlsx`, `.pptx`, `.html`) alongside MIME types. Extensions never match `f.type`, so files are rejected.
 
 ## Changes
 
-### 1. Update Homepage (src/pages/Index.tsx)
+### 1. Fix FileDropZone drag-and-drop filtering (src/components/tool/FileDropZone.tsx)
 
-- Set Split PDF to `enabled: true` with correct URL `/split-pdf`
-- Add Remove Pages, Extract Pages, and Organize Pages to the highlights grid with `enabled: true`
-- Update URLs for any existing entries that don't match actual routes
+Update the `handleDrop` filter to also match by file extension when the accept token starts with `.`:
 
-### 2. Fix OrganizePages ID generation (src/pages/OrganizePages.tsx)
+```
+// Current (broken for extensions):
+return accept.split(",").some((a) => f.type === a.trim());
 
-- Replace the module-level `let nextId` with `crypto.randomUUID()` or the existing `generateId()` utility from `file-utils.ts`
+// Fixed:
+return accept.split(",").some((a) => {
+  const token = a.trim();
+  if (token.startsWith(".")) {
+    return f.name.toLowerCase().endsWith(token.toLowerCase());
+  }
+  return f.type === token;
+});
+```
 
-### 3. Add user-facing error toasts (all 3 new pages)
+### 2. Clean up PowerPointToPdf.tsx unused variables
 
-- Import `useToast` or `toast` from sonner
-- Replace `console.error("Could not read PDF")` with a toast notification so users know the file couldn't be read
-- Apply same pattern to the processing `catch` blocks
+- Remove unused `textMatches` (line 56) and `currentParagraph` (line 57) declarations.
+
+### 3. Fix memory leak in PowerPointToPdf.tsx slide image rendering
+
+- Track blob URLs created for slide images and revoke them in the `finally` block (after line 186).
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/pages/Index.tsx` | Enable Split PDF, add 3 new tools to grid |
-| `src/pages/OrganizePages.tsx` | Fix ID generation, add error toasts |
-| `src/pages/RemovePages.tsx` | Add error toasts for failed PDF reads |
-| `src/pages/ExtractPages.tsx` | Add error toasts for failed PDF reads |
+| `src/components/tool/FileDropZone.tsx` | Fix drag-and-drop to support file extension matching |
+| `src/pages/PowerPointToPdf.tsx` | Remove unused variables, fix blob URL memory leak |
 
