@@ -1,75 +1,105 @@
 
-# Reusable Tool Page Components
 
-Extract all the polished UX patterns from the Merge PDF page into generic, reusable components that any future tool page (Split PDF, Image Converter, etc.) can use.
+# New PDF Tools: Remove Pages, Extract Pages, Organize Pages
 
-## Components to Create
-
-### 1. `src/components/tool/FileDropZone.tsx` (generic version)
-Move from `src/components/merge/FileDropZone.tsx` but make it configurable:
-- Accept `accept` prop (e.g. `"application/pdf"`, `"image/*"`) instead of hardcoded PDF filter
-- Accept `title`, `subtitle`, `buttonLabel` props for custom text (defaults provided)
-- Accept `icon` prop for the drag-active icon (defaults to `FileStack`)
-
-### 2. `src/components/tool/FileList.tsx` (generic sortable file list)
-Move from `src/components/merge/FileList.tsx`:
-- Rename `PdfFileItem` to `FileItem` (same shape: `id`, `file`, `pageCount`, `sizeFormatted`)
-- Accept `headerTitle` prop (e.g. "Files to merge", "Files to split") instead of hardcoded text
-- Accept optional `headerHint` prop (e.g. "Drag to reorder - First file = first pages")
-- Keep all the DnD overlay, stagger animation, mobile touch support as-is
-
-### 3. `src/components/tool/ToolPageLayout.tsx` (page shell)
-Extracts the shared page chrome from `MergePdf.tsx`:
-- **Header** with icon, title, subtitle
-- **Step indicator** (configurable steps array: `{ key, label }[]`, current step)
-- **Trust badges** (configurable array shown on upload step)
-- **Processing view** with spinner, progress bar, configurable message
-- **Success view** with download button, stats, reset button -- all configurable via props
-- Wraps children for the main content area
-
-### 4. `src/components/tool/OutputConfig.tsx` (generic version of MergeConfig)
-Move from `src/components/merge/MergeConfig.tsx`:
-- Accept `extension` prop (`.pdf`, `.png`, etc.)
-- Accept `title` prop (defaults to "Output Settings")
-- Keep the same clean card UI
-
-### 5. `src/components/tool/SuccessView.tsx` (generic version of MergeSuccess)
-Move from `src/components/merge/MergeSuccess.tsx`:
-- Accept `title` (e.g. "Merge Complete!", "Split Complete!")
-- Accept `description` (replaces the hardcoded "X files merged into Y pages")
-- Accept `fileName`, `onDownload`, `onReset`, `resetLabel` props
-
-### 6. `src/components/tool/ProcessingView.tsx`
-Extract the merging/processing spinner UI:
-- Accept `title`, `subtitle`, `progress` props
-
-### 7. `src/components/tool/StepIndicator.tsx`
-Extract the step pills into its own component:
-- Accept `steps: { key: string; label: string }[]` and `currentStep: string`
-
-### 8. `src/components/tool/TrustBadges.tsx`
-Extract the trust badges row:
-- Accept `badges: { icon: LucideIcon; label: string }[]`
-
-## Utility to Extract
-
-### `src/lib/file-utils.ts`
-- `formatFileSize(bytes)` -- move from MergePdf
-- `generateId()` -- move from MergePdf
-- `staggerAddFiles(items, setFiles, options?)` -- the staggered entrance logic
-
-## Refactor MergePdf
-
-Update `src/pages/MergePdf.tsx` to import and use all the new reusable components, keeping only the merge-specific PDF logic (the `handleMerge` function using `pdf-lib`). The page should shrink significantly.
-
-## Keep merge/ aliases (optional)
-Keep `src/components/merge/` files as thin re-exports of the new `tool/` components with merge-specific defaults, or just update imports directly. Simpler to update imports directly.
+Three new tools built on the existing reusable `tool/` framework, each with a focused purpose and polished "beast mode" UX.
 
 ---
 
-## Technical Notes
+## Design Philosophy
 
-- No new dependencies needed -- everything uses existing `@dnd-kit`, `lucide-react`, and Tailwind
-- All components remain client-side only, no backend changes
-- The `FileDropZone` `accept` prop maps directly to the HTML `<input accept="">` attribute and the drag-drop MIME filter
-- The stagger logic moves to `file-utils.ts` as a standalone async function: `staggerAddFiles(items, setter, maxDuration=2000, maxDelay=400)`
+Each tool does **one thing perfectly** rather than overloading users with options. The platform stays in charge: clear labels, smart defaults, and guided flows. Users get flexibility within a controlled, opinionated experience.
+
+---
+
+## Tool 1: Remove Pages (`/remove-pages`)
+
+**Purpose:** Delete unwanted pages from a PDF and download the cleaned version.
+
+**Flow:** Upload -> Select pages to REMOVE -> Download
+
+**UX Details:**
+- Upload single PDF via the standard `FileDropZone`
+- Page grid identical to Split PDF's "Pick Pages" but inverted: pages start **all selected** (kept), clicking a page **marks it for removal** (turns red/destructive styling with strikethrough)
+- "Keep All / Remove All" quick-toggle buttons
+- Live counter: "Keeping 8 of 12 pages (removing 4)"
+- Big red action button: "Remove 4 Pages" with a `Trash2` icon
+- Output is always a single PDF (no ZIP complexity)
+- Safety: disabled button if user tries to remove ALL pages ("Must keep at least 1 page" hint)
+
+**Why it's separate from Split:** Remove is destructive-language ("delete these"), Split is constructive ("extract these"). Different mental model, clearer intent, fewer mistakes.
+
+---
+
+## Tool 2: Extract Pages (`/extract-pages`)
+
+**Purpose:** Pull out specific pages into a new PDF. Identical outcome to Split's "Pick Pages" mode, but framed as extraction with a simpler, single-purpose UI.
+
+**Flow:** Upload -> Select pages to EXTRACT -> Download
+
+**UX Details:**
+- Upload single PDF via `FileDropZone`
+- Page grid where clicking **selects pages to keep** (primary color highlight, same as Split)
+- "Select All / Clear" toggles
+- Live counter: "Extracting 5 of 12 pages"
+- Action button: "Extract 5 Pages" with `FileOutput` icon
+- Output is always a single PDF containing only the selected pages
+- Simpler than Split -- no modes, no ranges, no chunks. Just click and extract.
+
+**Why it's separate from Split:** Split has 4 modes and produces ZIP files. Extract is the "I just want these pages" quick tool. Fewer decisions = faster for common use cases.
+
+---
+
+## Tool 3: Organize Pages (`/organize`)
+
+**Purpose:** Reorder, duplicate, or rotate pages within a PDF. The power tool.
+
+**Flow:** Upload -> Visual page list with drag-to-reorder -> Download
+
+**UX Details:**
+- Upload single PDF via `FileDropZone`
+- Vertical sortable list (reusing `@dnd-kit` patterns from `FileList`) showing each page as a numbered card
+- Each page card shows: page number, a small page-size indicator, and action buttons
+- Per-page actions (icon buttons on each card):
+  - **Rotate** (90deg clockwise toggle, cycles 0/90/180/270) with `RotateCw` icon
+  - **Duplicate** page (inserts copy below) with `Copy` icon  
+  - **Delete** page with `Trash2` icon
+- Drag handle on the left for reordering (same DnD patterns as merge file list)
+- Top toolbar with bulk actions: "Reverse Order", "Remove Duplicates" (if any were added)
+- Live page count: "12 pages (2 rotated, 1 duplicated)"
+- Action button: "Save Organized PDF" with `LayoutList` icon
+- Output is always a single PDF
+
+**Why this is the power tool:** It's the only tool that lets users rearrange page order, rotate individual pages, and duplicate pages -- all in one place with drag-and-drop.
+
+---
+
+## Technical Implementation
+
+### Files to Create
+1. **`src/pages/RemovePages.tsx`** -- ~200 lines, follows SplitPdf pattern
+2. **`src/pages/ExtractPages.tsx`** -- ~180 lines, simplest of the three
+3. **`src/pages/OrganizePages.tsx`** -- ~350 lines, most complex (DnD + per-page actions)
+
+### Files to Update
+4. **`src/App.tsx`** -- Add 3 new routes
+5. **`src/components/AppSidebar.tsx`** -- Enable the 3 sidebar items (already listed, just `enabled: false`)
+6. **`src/pages/Index.tsx`** -- No changes needed (homepage only shows 8 highlights)
+
+### Shared Components Used (no changes needed)
+- `ToolPageLayout` -- page shell with header, steps, trust badges
+- `FileDropZone` -- upload step
+- `OutputConfig` -- output filename input
+- `ProcessingView` -- processing spinner
+- `SuccessView` -- download screen
+- `formatFileSize` from `file-utils`
+
+### PDF Processing (all client-side via `pdf-lib`)
+- **Remove/Extract:** `PDFDocument.create()` + `copyPages()` for selected/unselected pages
+- **Organize reorder:** `copyPages()` in the user's custom order
+- **Organize rotate:** `page.setRotation(degrees(angle))` from pdf-lib
+- **Organize duplicate:** Copy a page and insert it at the desired position
+
+### No new dependencies needed
+Everything uses existing `pdf-lib`, `@dnd-kit`, `lucide-react`, and Tailwind.
+
