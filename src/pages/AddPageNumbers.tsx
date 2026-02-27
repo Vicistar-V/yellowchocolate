@@ -52,7 +52,14 @@ const FORMAT_OPTIONS: { value: NumberFormat; label: string; preview: (n: number,
   { value: "page-of", label: "Page 1 of N", preview: (n, t) => `Page ${n} of ${t}` },
 ];
 
-const FONT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24];
+const ALIGNMENT_CLASSES: Record<Position, string> = {
+  "top-left": "items-start justify-start",
+  "top-center": "items-start justify-center",
+  "top-right": "items-start justify-end",
+  "bottom-left": "items-end justify-start",
+  "bottom-center": "items-end justify-center",
+  "bottom-right": "items-end justify-end",
+};
 
 export default function AddPageNumbers() {
   const [step, setStep] = useState<Step>("upload");
@@ -277,7 +284,7 @@ export default function AddPageNumbers() {
                     <button
                       key={pos.value}
                       onClick={() => setPosition(pos.value)}
-                      className={`flex items-${pos.row === "top" ? "start" : "end"} justify-${pos.col === "left" ? "start" : pos.col === "right" ? "end" : "center"} p-2 rounded-lg transition-all text-[10px] font-bold ${
+                      className={`flex ${ALIGNMENT_CLASSES[pos.value]} p-2 rounded-lg transition-all text-[10px] font-bold ${
                         position === pos.value
                           ? "bg-primary/20 text-primary ring-1 ring-primary/40"
                           : "hover:bg-muted text-muted-foreground/40 hover:text-muted-foreground"
