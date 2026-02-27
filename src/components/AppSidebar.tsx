@@ -65,11 +65,11 @@ const toolCategories: ToolCategory[] = [
   {
     label: "Convert from PDF",
     items: [
-      { title: "PDF to JPG", url: "/pdf-to-jpg", icon: ImageDown, enabled: false },
-      { title: "PDF to WORD", url: "/pdf-to-word", icon: FileDown, enabled: false },
-      { title: "PDF to POWERPOINT", url: "/pdf-to-ppt", icon: PresentationIcon, enabled: false },
-      { title: "PDF to EXCEL", url: "/pdf-to-excel", icon: TableProperties, enabled: false },
-      { title: "PDF to PDF/A", url: "/pdf-to-pdfa", icon: Shield, enabled: false },
+      { title: "PDF to Image", url: "/pdf-to-image", icon: ImageDown, enabled: true },
+      { title: "PDF to WORD", url: "/pdf-to-word", icon: FileDown, enabled: true },
+      { title: "PDF to POWERPOINT", url: "/pdf-to-ppt", icon: PresentationIcon, enabled: true },
+      { title: "PDF to EXCEL", url: "/pdf-to-excel", icon: TableProperties, enabled: true },
+      { title: "PDF to PDF/A", url: "/pdf-to-pdfa", icon: Shield, enabled: true },
     ],
   },
   {
