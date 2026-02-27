@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 import {

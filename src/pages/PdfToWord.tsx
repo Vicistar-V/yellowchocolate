@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import * as pdfjsLib from "pdfjs-dist";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, PageBreak } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import JSZip from "jszip";
 import { FileDown, ShieldCheck, Zap, ArrowRight, Files } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";

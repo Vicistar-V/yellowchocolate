@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { PDFDocument, PDFName, PDFString, PDFArray, PDFDict, PDFHexString } from "pdf-lib";
+import { PDFDocument, PDFName, PDFString } from "pdf-lib";
 import JSZip from "jszip";
 import { Shield, ShieldCheck, Zap, ArrowRight, Files } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
