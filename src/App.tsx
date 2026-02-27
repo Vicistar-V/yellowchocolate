@@ -12,6 +12,7 @@ import SplitPdf from "./pages/SplitPdf";
 import RemovePages from "./pages/RemovePages";
 import ExtractPages from "./pages/ExtractPages";
 import OrganizePages from "./pages/OrganizePages";
+import ScanToPdf from "./pages/ScanToPdf";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/remove-pages" element={<RemovePages />} />
             <Route path="/extract-pages" element={<ExtractPages />} />
             <Route path="/organize" element={<OrganizePages />} />
+            <Route path="/scan-to-pdf" element={<ScanToPdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
