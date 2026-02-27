@@ -38,7 +38,7 @@ const toolCategories: ToolCategory[] = [
   {
     label: "Organize PDF",
     items: [
-      { title: "Merge PDF", url: "/merge", icon: FileStack, enabled: true },
+      { title: "Merge PDF", url: "/merge-pdf", icon: FileStack, enabled: true },
       { title: "Split PDF", url: "/split", icon: Scissors, enabled: false },
       { title: "Remove Pages", url: "/remove-pages", icon: Trash2, enabled: false },
       { title: "Extract Pages", url: "/extract-pages", icon: FileOutput, enabled: false },

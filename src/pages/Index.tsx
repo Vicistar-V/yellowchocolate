@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 
 const highlights = [
-  { icon: FileStack, label: "Merge PDF", desc: "Combine multiple PDFs into one", url: "/merge", enabled: true },
+  { icon: FileStack, label: "Merge PDF", desc: "Combine multiple PDFs into one", url: "/merge-pdf", enabled: true },
   { icon: Scissors, label: "Split PDF", desc: "Separate pages into new files", url: "/split", enabled: false },
   { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress", enabled: false },
   { icon: Image, label: "JPG to PDF", desc: "Convert images to PDF", url: "/jpg-to-pdf", enabled: false },
