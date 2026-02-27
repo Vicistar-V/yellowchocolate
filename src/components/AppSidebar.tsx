@@ -43,7 +43,7 @@ const toolCategories: ToolCategory[] = [
       { title: "Remove Pages", url: "/remove-pages", icon: Trash2, enabled: true },
       { title: "Extract Pages", url: "/extract-pages", icon: FileOutput, enabled: true },
       { title: "Organize PDF", url: "/organize", icon: LayoutList, enabled: true },
-      { title: "Scan to PDF", url: "/scan", icon: ScanLine, enabled: false },
+      { title: "Scan to PDF", url: "/scan-to-pdf", icon: ScanLine, enabled: true },
     ],
   },
   {

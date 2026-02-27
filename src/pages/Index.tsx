@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import {
   FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Languages,
-  Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList,
+  Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList, ScanLine,
 } from "lucide-react";
 
 const highlights = [
@@ -10,6 +10,7 @@ const highlights = [
   { icon: Trash2, label: "Remove Pages", desc: "Delete unwanted pages", url: "/remove-pages", enabled: true },
   { icon: FileOutput, label: "Extract Pages", desc: "Pull specific pages out", url: "/extract-pages", enabled: true },
   { icon: LayoutList, label: "Organize Pages", desc: "Reorder, rotate & duplicate", url: "/organize", enabled: true },
+  { icon: ScanLine, label: "Scan to PDF", desc: "Camera or images to PDF", url: "/scan-to-pdf", enabled: true },
   { icon: Minimize2, label: "Compress PDF", desc: "Reduce file size instantly", url: "/compress-pdf", enabled: false },
   { icon: Image, label: "JPG to PDF", desc: "Convert images to PDF", url: "/jpg-to-pdf", enabled: false },
   { icon: FileDown, label: "PDF to WORD", desc: "Extract text to editable docs", url: "/pdf-to-word", enabled: false },
