@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import {
-  FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Languages,
+  FileStack, Scissors, Minimize2, Image, FileDown, RotateCw, Lock, Unlock, Languages,
   Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList,
   FileText, Table, Presentation, Code,
   ImageDown, PresentationIcon, TableProperties, Shield,
@@ -29,7 +29,8 @@ const highlights = [
   { icon: Hash, label: "Add Page Numbers", desc: "Number your pages", url: "/page-numbers", enabled: true },
   { icon: Droplets, label: "Add Watermark", desc: "Stamp text or images", url: "/watermark", enabled: true },
   { icon: Crop, label: "Crop PDF", desc: "Trim page margins", url: "/crop", enabled: true },
-  { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect-pdf", enabled: false },
+  { icon: Unlock, label: "Unlock PDF", desc: "Remove password protection", url: "/unlock", enabled: true },
+  { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect", enabled: true },
   { icon: Languages, label: "Translate PDF", desc: "Translate documents", url: "/translate-pdf", enabled: false },
 ];
 

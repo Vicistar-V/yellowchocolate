@@ -28,7 +28,8 @@ import RotatePdf from "./pages/RotatePdf";
 import AddPageNumbers from "./pages/AddPageNumbers";
 import AddWatermark from "./pages/AddWatermark";
 import CropPdf from "./pages/CropPdf";
-
+import UnlockPdf from "./pages/UnlockPdf";
+import ProtectPdf from "./pages/ProtectPdf";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -62,6 +63,8 @@ const App = () => (
             <Route path="/page-numbers" element={<AddPageNumbers />} />
             <Route path="/watermark" element={<AddWatermark />} />
             <Route path="/crop" element={<CropPdf />} />
+            <Route path="/unlock" element={<UnlockPdf />} />
+            <Route path="/protect" element={<ProtectPdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
