@@ -75,10 +75,10 @@ const toolCategories: ToolCategory[] = [
   {
     label: "Edit PDF",
     items: [
-      { title: "Rotate PDF", url: "/rotate", icon: RotateCw, enabled: false },
-      { title: "Add Page Numbers", url: "/page-numbers", icon: Hash, enabled: false },
-      { title: "Add Watermark", url: "/watermark", icon: Droplets, enabled: false },
-      { title: "Crop PDF", url: "/crop", icon: Crop, enabled: false },
+      { title: "Rotate PDF", url: "/rotate", icon: RotateCw, enabled: true },
+      { title: "Add Page Numbers", url: "/page-numbers", icon: Hash, enabled: true },
+      { title: "Add Watermark", url: "/watermark", icon: Droplets, enabled: true },
+      { title: "Crop PDF", url: "/crop", icon: Crop, enabled: true },
       { title: "Edit PDF", url: "/edit", icon: Pencil, enabled: false },
     ],
   },

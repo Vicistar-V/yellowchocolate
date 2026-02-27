@@ -24,6 +24,10 @@ import PdfToWord from "./pages/PdfToWord";
 import PdfToPowerPoint from "./pages/PdfToPowerPoint";
 import PdfToExcel from "./pages/PdfToExcel";
 import PdfToPdfa from "./pages/PdfToPdfa";
+import RotatePdf from "./pages/RotatePdf";
+import AddPageNumbers from "./pages/AddPageNumbers";
+import AddWatermark from "./pages/AddWatermark";
+import CropPdf from "./pages/CropPdf";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +58,10 @@ const App = () => (
             <Route path="/pdf-to-ppt" element={<PdfToPowerPoint />} />
             <Route path="/pdf-to-excel" element={<PdfToExcel />} />
             <Route path="/pdf-to-pdfa" element={<PdfToPdfa />} />
+            <Route path="/rotate" element={<RotatePdf />} />
+            <Route path="/page-numbers" element={<AddPageNumbers />} />
+            <Route path="/watermark" element={<AddWatermark />} />
+            <Route path="/crop" element={<CropPdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
