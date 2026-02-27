@@ -3,7 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import {
   ScanLine, ShieldCheck, Zap, ArrowRight, RotateCw,
   Trash2, GripVertical, Camera, Upload, Sun, Contrast,
-  Palette, Image as ImageIcon, Plus, X, Crop,
+  Palette, Image as ImageIcon, Plus, X,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -27,13 +27,6 @@ type Step = "capture" | "configure" | "processing" | "done";
 type ColorFilter = "color" | "grayscale" | "bw";
 type PageSize = "a4" | "letter" | "fit";
 
-interface CropRegion {
-  x: number; // 0-1 percentage of source width
-  y: number;
-  w: number;
-  h: number;
-}
-
 interface ScannedPage {
   id: string;
   originalDataUrl: string;
@@ -41,7 +34,6 @@ interface ScannedPage {
   brightness: number;
   contrast: number;
   filter: ColorFilter;
-  crop: CropRegion | null;
   width: number;
   height: number;
 }
@@ -77,24 +69,8 @@ function applyEnhancements(
   targetWidth?: number,
   targetHeight?: number,
 ): HTMLCanvasElement {
-  // Step 0: Apply crop to source image first
-  let srcCanvas: HTMLCanvasElement | HTMLImageElement = img;
-  let srcW = img.naturalWidth;
-  let srcH = img.naturalHeight;
-
-  if (page.crop) {
-    const cx = Math.round(page.crop.x * img.naturalWidth);
-    const cy = Math.round(page.crop.y * img.naturalHeight);
-    const cw = Math.round(page.crop.w * img.naturalWidth);
-    const ch = Math.round(page.crop.h * img.naturalHeight);
-    const cropCanvas = document.createElement("canvas");
-    cropCanvas.width = cw;
-    cropCanvas.height = ch;
-    cropCanvas.getContext("2d")!.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
-    srcCanvas = cropCanvas;
-    srcW = cw;
-    srcH = ch;
-  }
+  const srcW = img.naturalWidth;
+  const srcH = img.naturalHeight;
 
   const w = targetWidth ?? srcW;
   const h = targetHeight ?? srcH;
@@ -114,9 +90,9 @@ function applyEnhancements(
   ctx.translate(canvasW / 2, canvasH / 2);
   ctx.rotate((page.rotation * Math.PI) / 180);
   if (isRotated) {
-    ctx.drawImage(srcCanvas, 0, 0, srcW, srcH, -canvasH / 2, -canvasW / 2, canvasH, canvasW);
+    ctx.drawImage(img, 0, 0, srcW, srcH, -canvasH / 2, -canvasW / 2, canvasH, canvasW);
   } else {
-    ctx.drawImage(srcCanvas, 0, 0, srcW, srcH, -canvasW / 2, -canvasH / 2, canvasW, canvasH);
+    ctx.drawImage(img, 0, 0, srcW, srcH, -canvasW / 2, -canvasH / 2, canvasW, canvasH);
   }
   ctx.restore();
 
@@ -287,7 +263,6 @@ function ScanPageCard({
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-xs text-muted-foreground">{item.width}×{item.height}</span>
           {item.rotation !== 0 && <span className="text-xs text-primary font-medium">↻ {item.rotation}°</span>}
-          {item.crop && <span className="text-xs text-accent font-medium">cropped</span>}
           {item.filter !== "color" && <span className="text-xs text-accent font-medium">{item.filter}</span>}
           {(item.brightness !== 0 || item.contrast !== 0) && (
             <span className="text-xs text-muted-foreground">adjusted</span>
@@ -347,13 +322,9 @@ function SortableScanItem({
 function EnhancementPanel({
   page,
   onUpdate,
-  cropMode,
-  onToggleCrop,
 }: {
   page: ScannedPage;
   onUpdate: (id: string, updates: Partial<ScannedPage>) => void;
-  cropMode: boolean;
-  onToggleCrop: () => void;
 }) {
   return (
     <div className="bg-card border rounded-xl p-5 space-y-4 animate-fade-in">
@@ -361,37 +332,6 @@ function EnhancementPanel({
         <Palette className="w-4 h-4 text-primary" />
         Image Enhancements
       </h3>
-
-      {/* Crop toggle */}
-      <div>
-        <label className="text-xs font-medium text-muted-foreground mb-2 block">Crop</label>
-        <div className="flex gap-2">
-          <button
-            onClick={onToggleCrop}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
-              cropMode
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            <Crop className="w-3.5 h-3.5" />
-            {cropMode ? "Done Cropping" : "Crop Image"}
-          </button>
-          {page.crop && (
-            <button
-              onClick={() => onUpdate(page.id, { crop: null })}
-              className="py-2 px-3 rounded-lg text-xs font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-            >
-              Reset Crop
-            </button>
-          )}
-        </div>
-        {cropMode && (
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Drag the handles on the preview to adjust the crop region
-          </p>
-        )}
-      </div>
 
       {/* Color filter */}
       <div>
@@ -461,7 +401,7 @@ function EnhancementPanel({
 
       {/* Reset */}
       <button
-        onClick={() => onUpdate(page.id, { brightness: 0, contrast: 0, filter: "color", rotation: 0, crop: null })}
+        onClick={() => onUpdate(page.id, { brightness: 0, contrast: 0, filter: "color", rotation: 0 })}
         className="w-full py-2 px-3 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
       >
         Reset to Original
@@ -470,142 +410,9 @@ function EnhancementPanel({
   );
 }
 
-/* ─── Interactive crop overlay ─── */
-function CropOverlay({
-  crop,
-  onChange,
-  containerWidth,
-  containerHeight,
-}: {
-  crop: CropRegion;
-  onChange: (crop: CropRegion) => void;
-  containerWidth: number;
-  containerHeight: number;
-}) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{
-    type: "move" | "tl" | "tr" | "bl" | "br" | "t" | "b" | "l" | "r";
-    startX: number;
-    startY: number;
-    startCrop: CropRegion;
-  } | null>(null);
-
-  const px = (v: number, total: number) => v * total;
-
-  const handlePointerDown = useCallback(
-    (type: typeof dragRef.current extends null ? never : NonNullable<typeof dragRef.current>["type"], e: React.PointerEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      dragRef.current = { type, startX: e.clientX, startY: e.clientY, startCrop: { ...crop } };
-    },
-    [crop]
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!dragRef.current) return;
-      const { type, startX, startY, startCrop } = dragRef.current;
-      const dx = (e.clientX - startX) / containerWidth;
-      const dy = (e.clientY - startY) / containerHeight;
-      const MIN = 0.05;
-
-      let { x, y, w, h } = startCrop;
-
-      if (type === "move") {
-        x = Math.max(0, Math.min(1 - w, x + dx));
-        y = Math.max(0, Math.min(1 - h, y + dy));
-      } else {
-        if (type.includes("l")) {
-          const newX = Math.max(0, Math.min(x + w - MIN, x + dx));
-          w = w - (newX - x);
-          x = newX;
-        }
-        if (type.includes("r")) {
-          w = Math.max(MIN, Math.min(1 - x, w + dx));
-        }
-        if (type.includes("t")) {
-          const newY = Math.max(0, Math.min(y + h - MIN, y + dy));
-          h = h - (newY - y);
-          y = newY;
-        }
-        if (type.includes("b")) {
-          h = Math.max(MIN, Math.min(1 - y, h + dy));
-        }
-      }
-
-      onChange({ x, y, w, h });
-    },
-    [containerWidth, containerHeight, onChange]
-  );
-
-  const handlePointerUp = useCallback(() => {
-    dragRef.current = null;
-  }, []);
-
-  const left = px(crop.x, containerWidth);
-  const top = px(crop.y, containerHeight);
-  const width = px(crop.w, containerWidth);
-  const height = px(crop.h, containerHeight);
-
-  const handleStyle = "absolute w-3 h-3 bg-primary border-2 border-primary-foreground rounded-full shadow-md z-10";
-
-  return (
-    <div
-      ref={overlayRef}
-      className="absolute inset-0"
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-    >
-      {/* Darkened areas */}
-      <div className="absolute inset-0 bg-black/50" style={{ clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${left}px ${top}px, ${left}px ${top + height}px, ${left + width}px ${top + height}px, ${left + width}px ${top}px, ${left}px ${top}px)` }} />
-
-      {/* Crop region border */}
-      <div
-        className="absolute border-2 border-primary cursor-move"
-        style={{ left, top, width, height }}
-        onPointerDown={(e) => handlePointerDown("move", e)}
-      >
-        {/* Grid lines */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute left-1/3 top-0 bottom-0 w-px bg-primary/30" />
-          <div className="absolute left-2/3 top-0 bottom-0 w-px bg-primary/30" />
-          <div className="absolute top-1/3 left-0 right-0 h-px bg-primary/30" />
-          <div className="absolute top-2/3 left-0 right-0 h-px bg-primary/30" />
-        </div>
-      </div>
-
-      {/* Corner handles */}
-      <div className={handleStyle} style={{ left: left - 6, top: top - 6, cursor: "nwse-resize" }} onPointerDown={(e) => handlePointerDown("tl", e)} />
-      <div className={handleStyle} style={{ left: left + width - 6, top: top - 6, cursor: "nesw-resize" }} onPointerDown={(e) => handlePointerDown("tr", e)} />
-      <div className={handleStyle} style={{ left: left - 6, top: top + height - 6, cursor: "nesw-resize" }} onPointerDown={(e) => handlePointerDown("bl", e)} />
-      <div className={handleStyle} style={{ left: left + width - 6, top: top + height - 6, cursor: "nwse-resize" }} onPointerDown={(e) => handlePointerDown("br", e)} />
-
-      {/* Edge handles */}
-      <div className={handleStyle} style={{ left: left + width / 2 - 6, top: top - 6, cursor: "ns-resize" }} onPointerDown={(e) => handlePointerDown("t", e)} />
-      <div className={handleStyle} style={{ left: left + width / 2 - 6, top: top + height - 6, cursor: "ns-resize" }} onPointerDown={(e) => handlePointerDown("b", e)} />
-      <div className={handleStyle} style={{ left: left - 6, top: top + height / 2 - 6, cursor: "ew-resize" }} onPointerDown={(e) => handlePointerDown("l", e)} />
-      <div className={handleStyle} style={{ left: left + width - 6, top: top + height / 2 - 6, cursor: "ew-resize" }} onPointerDown={(e) => handlePointerDown("r", e)} />
-    </div>
-  );
-}
-
-/* ─── Large preview with enhancements + crop ─── */
-function LargePreview({
-  page,
-  cropMode,
-  onCropChange,
-}: {
-  page: ScannedPage;
-  cropMode: boolean;
-  onCropChange: (crop: CropRegion) => void;
-}) {
+/* ─── Large preview with enhancements ─── */
+function LargePreview({ page }: { page: ScannedPage }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [displaySize, setDisplaySize] = useState({ w: 0, h: 0 });
-
-  // For crop mode, show uncropped image; for normal mode, show cropped
-  const previewPage = cropMode ? { ...page, crop: null } : page;
 
   useEffect(() => {
     const img = new window.Image();
@@ -613,32 +420,19 @@ function LargePreview({
       const scale = Math.min(400 / img.naturalWidth, 400 / img.naturalHeight, 1);
       const w = img.naturalWidth * scale;
       const h = img.naturalHeight * scale;
-      const enhanced = applyEnhancements(img, previewPage, w, h);
+      const enhanced = applyEnhancements(img, page, w, h);
       const canvas = canvasRef.current;
       if (!canvas) return;
       canvas.width = enhanced.width;
       canvas.height = enhanced.height;
       canvas.getContext("2d")!.drawImage(enhanced, 0, 0);
-      setDisplaySize({ w: enhanced.width, h: enhanced.height });
     };
     img.src = page.originalDataUrl;
-  }, [page, previewPage]);
-
-  const activeCrop = page.crop ?? { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+  }, [page]);
 
   return (
     <div className="bg-card border rounded-xl p-4 flex items-center justify-center">
-      <div ref={containerRef} className="relative inline-block">
-        <canvas ref={canvasRef} className="max-w-full max-h-[300px] rounded-lg block" />
-        {cropMode && displaySize.w > 0 && (
-          <CropOverlay
-            crop={activeCrop}
-            onChange={onCropChange}
-            containerWidth={displaySize.w}
-            containerHeight={displaySize.h}
-          />
-        )}
-      </div>
+      <canvas ref={canvasRef} className="max-w-full max-h-[300px] rounded-lg block" />
     </div>
   );
 }
@@ -657,7 +451,6 @@ export default function ScanToPdf() {
   const [resultFileName, setResultFileName] = useState("");
   const [resultStats, setResultStats] = useState("");
   const [options, setOptions] = useState<OutputOptions>({ outputFileName: "scanned-document" });
-  const [cropMode, setCropMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -678,7 +471,6 @@ export default function ScanToPdf() {
       brightness: 0,
       contrast: 0,
       filter: "color",
-      crop: null,
       width,
       height,
     };
@@ -756,7 +548,7 @@ export default function ScanToPdf() {
 
   const handleBatchReset = useCallback(() => {
     setPages((prev) =>
-      prev.map((p) => ({ ...p, brightness: 0, contrast: 0, filter: "color" as ColorFilter, rotation: 0, crop: null }))
+      prev.map((p) => ({ ...p, brightness: 0, contrast: 0, filter: "color" as ColorFilter, rotation: 0 }))
     );
     toast.success("Reset all pages to original");
   }, []);
@@ -1118,18 +910,10 @@ export default function ScanToPdf() {
             <div className="space-y-4">
               {selectedPage ? (
                 <>
-                  <LargePreview
-                    page={selectedPage}
-                    cropMode={cropMode}
-                    onCropChange={(crop) => {
-                      handleUpdatePage(selectedPage.id, { crop });
-                    }}
-                  />
+                  <LargePreview page={selectedPage} />
                   <EnhancementPanel
                     page={selectedPage}
                     onUpdate={handleUpdatePage}
-                    cropMode={cropMode}
-                    onToggleCrop={() => setCropMode((v) => !v)}
                   />
                 </>
               ) : (
