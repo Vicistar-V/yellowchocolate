@@ -747,6 +747,20 @@ export default function ScanToPdf() {
     toast.success("Applied to all pages");
   }, [selectedPage]);
 
+  const handleBatchAutoEnhance = useCallback(() => {
+    setPages((prev) =>
+      prev.map((p) => ({ ...p, brightness: 10, contrast: 30, filter: "grayscale" as ColorFilter }))
+    );
+    toast.success("Auto-enhanced all pages", { description: "Brightness +10, Contrast +30, Grayscale" });
+  }, []);
+
+  const handleBatchReset = useCallback(() => {
+    setPages((prev) =>
+      prev.map((p) => ({ ...p, brightness: 0, contrast: 0, filter: "color" as ColorFilter, rotation: 0, crop: null }))
+    );
+    toast.success("Reset all pages to original");
+  }, []);
+
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
   }
@@ -1030,22 +1044,37 @@ export default function ScanToPdf() {
             </div>
           </div>
 
-          {/* Add more buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setStep("capture"); }}
-              className="flex items-center gap-1.5 text-xs text-primary font-medium px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add More Pages
-            </button>
-            {selectedPage && (
+          {/* Batch actions toolbar */}
+          <div className="bg-card border rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Batch Actions</h3>
+            <div className="flex flex-wrap gap-2">
               <button
-                onClick={handleApplyToAll}
-                className="flex items-center gap-1.5 text-xs text-primary font-medium px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors ml-auto"
+                onClick={() => { setStep("capture"); }}
+                className="flex items-center gap-1.5 text-xs text-primary font-medium px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
               >
-                Apply Settings to All
+                <Plus className="w-3.5 h-3.5" /> Add More Pages
               </button>
-            )}
+              <button
+                onClick={handleBatchAutoEnhance}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+              >
+                ✨ Auto-Enhance All
+              </button>
+              <button
+                onClick={handleBatchReset}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+              >
+                Reset All
+              </button>
+              {selectedPage && (
+                <button
+                  onClick={handleApplyToAll}
+                  className="flex items-center gap-1.5 text-xs text-primary font-medium px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors ml-auto"
+                >
+                  Apply Current to All
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Sortable list + enhancement panel */}
