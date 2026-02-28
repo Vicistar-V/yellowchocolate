@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import JSZip from "jszip";
 import { Presentation, ShieldCheck, Zap, ArrowRight, Files } from "lucide-react";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
 import { FileDropZone } from "@/components/tool/FileDropZone";
 import { FileList } from "@/components/tool/FileList";
@@ -10,7 +10,6 @@ import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
 import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
-import html2canvas from "html2canvas";
 
 type Step = "upload" | "ready" | "processing" | "done";
 
@@ -119,91 +118,101 @@ async function renderSlidesToPdf(
   onProgress?: (p: number) => void
 ): Promise<Blob> {
   const pdfDoc = await PDFDocument.create();
-  const slideWidth = 960;
-  const slideHeight = 540;
-  const pdfW = 720;
-  const pdfH = 405;
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const italic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+  const slideW = 720; // 10" * 72
+  const slideH = 405; // 5.625" * 72 (16:9)
+  const marginX = 40;
+  const marginTop = 50;
 
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i];
+    const page = pdfDoc.addPage([slideW, slideH]);
 
-    const container = document.createElement("div");
-    container.style.cssText = `
-      position: fixed; left: 0; top: 0;
-      width: ${slideWidth}px; height: ${slideHeight}px;
-      background: white; padding: 40px 50px;
-      box-sizing: border-box; display: flex; flex-direction: column;
-      justify-content: center; font-family: 'Segoe UI', Arial, sans-serif;
-      overflow: hidden; z-index: -99999; opacity: 0; pointer-events: none;
-    `;
+    // White background
+    page.drawRectangle({ x: 0, y: 0, width: slideW, height: slideH, color: rgb(1, 1, 1) });
 
-    // Add images first
-    const blobUrls: string[] = [];
+    let y = slideH - marginTop;
+
+    // Embed images
     if (slide.images.length > 0) {
-      for (const img of slide.images.slice(0, 3)) {
+      for (const imgData of slide.images.slice(0, 2)) {
         try {
-          const blob = new Blob([img.data.buffer as ArrayBuffer], { type: img.mime });
-          const url = URL.createObjectURL(blob);
-          blobUrls.push(url);
-          const imgEl = document.createElement("img");
-          imgEl.src = url;
-          imgEl.style.cssText = "max-width: 100%; max-height: 220px; object-fit: contain; margin: 8px auto; display: block;";
-          container.appendChild(imgEl);
+          let embeddedImg;
+          if (imgData.mime === "image/png") {
+            embeddedImg = await pdfDoc.embedPng(imgData.data);
+          } else if (imgData.mime === "image/jpeg" || imgData.mime === "image/jpg") {
+            embeddedImg = await pdfDoc.embedJpg(imgData.data);
+          } else {
+            continue; // skip unsupported formats
+          }
 
-          await new Promise<void>((resolve) => {
-            imgEl.onload = () => resolve();
-            imgEl.onerror = () => resolve();
-            setTimeout(resolve, 2000);
-          });
+          const maxW = slideW - marginX * 2;
+          const maxH = 180;
+          const scale = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height, 1);
+          const drawW = embeddedImg.width * scale;
+          const drawH = embeddedImg.height * scale;
+          const drawX = (slideW - drawW) / 2;
+
+          page.drawImage(embeddedImg, { x: drawX, y: y - drawH, width: drawW, height: drawH });
+          y -= drawH + 12;
         } catch {
           // skip problematic images
         }
       }
     }
 
-    // Add text content
+    // Draw title
     if (slide.texts.length > 0) {
+      const titleSize = 22;
       const titleText = slide.texts[0];
-      const titleEl = document.createElement("h1");
-      titleEl.textContent = titleText;
-      titleEl.style.cssText = "font-size: 28px; font-weight: 700; margin: 0 0 16px; color: #1a1a1a; text-align: center;";
-      container.appendChild(titleEl);
+      const titleWidth = bold.widthOfTextAtSize(titleText, titleSize);
+      const titleX = Math.max(marginX, (slideW - titleWidth) / 2);
 
-      for (let t = 1; t < slide.texts.length; t++) {
-        const pEl = document.createElement("p");
-        pEl.textContent = slide.texts[t];
-        pEl.style.cssText = "font-size: 16px; margin: 4px 0; color: #333; text-align: center; line-height: 1.5;";
-        container.appendChild(pEl);
+      if (y - titleSize > 20) {
+        page.drawText(titleText.slice(0, 80), {
+          x: titleX,
+          y: y - titleSize,
+          size: titleSize,
+          font: bold,
+          color: rgb(0.1, 0.1, 0.1),
+        });
+        y -= titleSize * 1.5;
       }
     }
 
-    if (slide.texts.length === 0 && slide.images.length === 0) {
-      const emptyEl = document.createElement("p");
-      emptyEl.textContent = `Slide ${i + 1}`;
-      emptyEl.style.cssText = "font-size: 24px; color: #999; text-align: center; font-style: italic;";
-      container.appendChild(emptyEl);
+    // Draw body text
+    for (let t = 1; t < slide.texts.length && y > 30; t++) {
+      const bodySize = 13;
+      const lineH = bodySize * 1.5;
+      const text = slide.texts[t];
+      const textWidth = regular.widthOfTextAtSize(text, bodySize);
+      const textX = Math.max(marginX, (slideW - textWidth) / 2);
+
+      page.drawText(text.slice(0, 120), {
+        x: textX,
+        y: y - bodySize,
+        size: bodySize,
+        font: regular,
+        color: rgb(0.25, 0.25, 0.25),
+      });
+      y -= lineH;
     }
 
-    document.body.appendChild(container);
-
-    try {
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        backgroundColor: "#ffffff",
-        width: slideWidth,
-        height: slideHeight,
-        logging: false,
+    // Empty slide placeholder
+    if (slide.texts.length === 0 && slide.images.length === 0) {
+      const placeholderText = `Slide ${i + 1}`;
+      const phSize = 20;
+      const phWidth = italic.widthOfTextAtSize(placeholderText, phSize);
+      page.drawText(placeholderText, {
+        x: (slideW - phWidth) / 2,
+        y: slideH / 2,
+        size: phSize,
+        font: italic,
+        color: rgb(0.6, 0.6, 0.6),
       });
-
-      const dataUrl = canvas.toDataURL("image/png");
-      const imgBytes = await fetch(dataUrl).then((r) => r.arrayBuffer());
-      const img = await pdfDoc.embedPng(imgBytes);
-
-      const page = pdfDoc.addPage([pdfW, pdfH]);
-      page.drawImage(img, { x: 0, y: 0, width: pdfW, height: pdfH });
-    } finally {
-      document.body.removeChild(container);
-      blobUrls.forEach((u) => URL.revokeObjectURL(u));
     }
 
     onProgress?.(Math.round(((i + 1) / slides.length) * 95));

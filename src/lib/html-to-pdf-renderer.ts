@@ -1,11 +1,169 @@
-import { PDFDocument } from "pdf-lib";
-import html2canvas from "html2canvas";
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
 
 /**
- * Renders an HTML string into a multi-page PDF blob.
- * The HTML is rendered into a hidden container, captured via html2canvas,
- * then split into A4-sized pages and embedded in a pdf-lib document.
+ * Text-based PDF renderer — produces real selectable text PDFs from HTML content.
+ * Uses pdf-lib's native text drawing instead of html2canvas image rasterization.
  */
+
+interface TextBlock {
+  type: "heading1" | "heading2" | "heading3" | "paragraph" | "list-item" | "table-row" | "empty-line";
+  text: string;
+  cells?: string[]; // for table rows
+  bold?: boolean;
+}
+
+/** Parse HTML string into structured text blocks */
+function parseHtmlToBlocks(html: string): TextBlock[] {
+  const blocks: TextBlock[] = [];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild || doc.body;
+
+  function processNode(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent?.trim();
+      if (text) {
+        blocks.push({ type: "paragraph", text });
+      }
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+
+    switch (tag) {
+      case "h1":
+        blocks.push({ type: "heading1", text: el.textContent?.trim() || "" });
+        break;
+      case "h2":
+        blocks.push({ type: "heading2", text: el.textContent?.trim() || "" });
+        break;
+      case "h3":
+      case "h4":
+      case "h5":
+      case "h6":
+        blocks.push({ type: "heading3", text: el.textContent?.trim() || "" });
+        break;
+      case "p":
+      case "div":
+      case "span":
+      case "section":
+      case "article": {
+        // Check if it contains block-level children
+        const hasBlockChildren = Array.from(el.children).some((c) =>
+          ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "table", "ul", "ol", "blockquote"].includes(c.tagName.toLowerCase())
+        );
+        if (hasBlockChildren) {
+          Array.from(el.childNodes).forEach(processNode);
+        } else {
+          const text = el.textContent?.trim();
+          if (text) {
+            blocks.push({ type: "paragraph", text });
+          }
+        }
+        break;
+      }
+      case "br":
+        blocks.push({ type: "empty-line", text: "" });
+        break;
+      case "ul":
+      case "ol": {
+        const items = el.querySelectorAll(":scope > li");
+        items.forEach((li, idx) => {
+          const prefix = tag === "ol" ? `${idx + 1}. ` : "• ";
+          blocks.push({ type: "list-item", text: prefix + (li.textContent?.trim() || "") });
+        });
+        break;
+      }
+      case "table": {
+        const rows = el.querySelectorAll("tr");
+        rows.forEach((tr, idx) => {
+          const cells = Array.from(tr.querySelectorAll("th, td")).map(
+            (cell) => cell.textContent?.trim() || ""
+          );
+          blocks.push({
+            type: "table-row",
+            text: cells.join(" | "),
+            cells,
+            bold: idx === 0 && tr.querySelector("th") !== null,
+          });
+        });
+        blocks.push({ type: "empty-line", text: "" });
+        break;
+      }
+      case "blockquote": {
+        const text = el.textContent?.trim();
+        if (text) {
+          blocks.push({ type: "paragraph", text: `"${text}"` });
+        }
+        break;
+      }
+      case "pre":
+      case "code": {
+        const text = el.textContent?.trim();
+        if (text) {
+          // Split code blocks into individual lines
+          text.split("\n").forEach((line) => {
+            blocks.push({ type: "paragraph", text: line || " " });
+          });
+        }
+        break;
+      }
+      case "strong":
+      case "b":
+      case "em":
+      case "i":
+      case "a":
+      case "u": {
+        const text = el.textContent?.trim();
+        if (text) {
+          blocks.push({ type: "paragraph", text });
+        }
+        break;
+      }
+      default:
+        // Process children for unknown elements
+        Array.from(el.childNodes).forEach(processNode);
+    }
+  }
+
+  Array.from(root.childNodes).forEach(processNode);
+  return blocks;
+}
+
+/** Wrap a single line of text to fit within maxWidth */
+function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
+  if (!text) return [""];
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
+    if (width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines.length ? lines : [""];
+}
+
+interface FontSet {
+  regular: PDFFont;
+  bold: PDFFont;
+  italic: PDFFont;
+}
+
+interface DrawState {
+  y: number;
+  page: PDFPage;
+}
+
 export async function renderHtmlToPdf(
   htmlContent: string,
   options?: {
@@ -15,152 +173,218 @@ export async function renderHtmlToPdf(
     pageHeight?: number;
   }
 ): Promise<Blob> {
-  const {
-    css = "",
-    onProgress,
-    pageWidth = 794,
-    pageHeight = 1123,
-  } = options ?? {};
+  const { onProgress } = options ?? {};
 
   onProgress?.(5);
 
-  // Create hidden container — use clip instead of extreme offsets for reliable rendering
-  const container = document.createElement("div");
-  container.style.cssText = `
-    position: fixed; left: -9999px; top: -9999px;
-    width: ${pageWidth}px; background: white; color: black;
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 14px; line-height: 1.6; padding: 48px;
-    box-sizing: border-box;
-    pointer-events: none;
-    overflow: visible;
-  `;
-  if (css) {
-    const style = document.createElement("style");
-    style.textContent = css;
-    container.appendChild(style);
-  }
+  const pdfDoc = await PDFDocument.create();
 
-  const content = document.createElement("div");
-  content.innerHTML = htmlContent;
-  container.appendChild(content);
-  document.body.appendChild(container);
+  // Embed standard fonts — these support real selectable text
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const italic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+  const fonts: FontSet = { regular, bold, italic };
 
   onProgress?.(10);
 
-  try {
-    // Wait for fonts
-    if (document.fonts?.ready) {
-      await document.fonts.ready;
-    }
+  // Page dimensions (A4 in points)
+  const pageW = 595.28;
+  const pageH = 841.89;
+  const marginX = 50;
+  const marginTop = 60;
+  const marginBottom = 60;
+  const contentWidth = pageW - marginX * 2;
+  const usableHeight = pageH - marginTop - marginBottom;
 
-    // Wait for all images to load
-    const images = container.querySelectorAll("img");
-    if (images.length > 0) {
-      await Promise.all(
-        Array.from(images).map(
-          (img) =>
-            new Promise<void>((resolve) => {
-              if (img.complete) return resolve();
-              img.onload = () => resolve();
-              img.onerror = () => resolve();
-              setTimeout(resolve, 3000);
-            })
-        )
-      );
-    }
+  // Parse HTML into text blocks
+  const blocks = parseHtmlToBlocks(htmlContent);
 
-    // Small layout settle delay
-    await new Promise((r) => setTimeout(r, 100));
+  onProgress?.(20);
 
-    onProgress?.(15);
-
-    // Render to canvas
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      width: pageWidth,
-      windowWidth: pageWidth,
-      logging: false,
+  if (blocks.length === 0) {
+    // Empty content — create a single page with a message
+    const page = pdfDoc.addPage([pageW, pageH]);
+    page.drawText("No extractable content found.", {
+      x: marginX,
+      y: pageH - marginTop - 20,
+      size: 14,
+      font: italic,
+      color: rgb(0.6, 0.6, 0.6),
     });
-
-    onProgress?.(50);
-
-    // Guard: detect blank canvas
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      const sample = ctx.getImageData(0, 0, canvas.width, Math.min(100, canvas.height));
-      let nonWhitePixels = 0;
-      for (let i = 0; i < sample.data.length; i += 4) {
-        if (sample.data[i] < 250 || sample.data[i + 1] < 250 || sample.data[i + 2] < 250) {
-          nonWhitePixels++;
-        }
-      }
-      if (nonWhitePixels < 10 && canvas.height > 200) {
-        // Canvas appears blank — check full height
-        const fullSample = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        let totalNonWhite = 0;
-        for (let i = 0; i < fullSample.data.length; i += 16) {
-          if (fullSample.data[i] < 250 || fullSample.data[i + 1] < 250 || fullSample.data[i + 2] < 250) {
-            totalNonWhite++;
-          }
-        }
-        if (totalNonWhite < 50) {
-          throw new Error("Rendered content appears blank. The document may be empty or unsupported.");
-        }
-      }
-    }
-
-    // Split canvas into pages
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    const scaledPageHeight = pageHeight * 2; // because scale: 2
-    const totalPages = Math.max(1, Math.ceil(canvasHeight / scaledPageHeight));
-
-    const pdfDoc = await PDFDocument.create();
-    const a4Width = 595.28;
-    const a4Height = 841.89;
-
-    for (let i = 0; i < totalPages; i++) {
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = canvasWidth;
-      const sliceHeight = Math.min(scaledPageHeight, canvasHeight - i * scaledPageHeight);
-      pageCanvas.height = sliceHeight;
-
-      const pCtx = pageCanvas.getContext("2d")!;
-      pCtx.fillStyle = "#ffffff";
-      pCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-      pCtx.drawImage(
-        canvas,
-        0, i * scaledPageHeight,
-        canvasWidth, sliceHeight,
-        0, 0,
-        canvasWidth, sliceHeight
-      );
-
-      const pageDataUrl = pageCanvas.toDataURL("image/png");
-      const imgBytes = await fetch(pageDataUrl).then((r) => r.arrayBuffer());
-      const img = await pdfDoc.embedPng(imgBytes);
-
-      const aspectRatio = sliceHeight / canvasWidth;
-      const pdfPageHeight = a4Width * aspectRatio;
-      const page = pdfDoc.addPage([a4Width, Math.min(pdfPageHeight, a4Height)]);
-      page.drawImage(img, {
-        x: 0,
-        y: 0,
-        width: a4Width,
-        height: Math.min(pdfPageHeight, a4Height),
-      });
-
-      onProgress?.(50 + Math.round(((i + 1) / totalPages) * 45));
-    }
-
-    const pdfBytes = await pdfDoc.save();
+    const bytes = await pdfDoc.save();
     onProgress?.(100);
-
-    return new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
-  } finally {
-    document.body.removeChild(container);
+    return new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" });
   }
+
+  // Create first page
+  let page = pdfDoc.addPage([pageW, pageH]);
+  let y = pageH - marginTop;
+
+  function newPage(): PDFPage {
+    page = pdfDoc.addPage([pageW, pageH]);
+    y = pageH - marginTop;
+    return page;
+  }
+
+  function ensureSpace(needed: number) {
+    if (y - needed < marginBottom) {
+      newPage();
+    }
+  }
+
+  // Render blocks
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const progress = 20 + Math.round((i / blocks.length) * 70);
+    onProgress?.(progress);
+
+    switch (block.type) {
+      case "heading1": {
+        const fontSize = 22;
+        const lineHeight = fontSize * 1.4;
+        ensureSpace(lineHeight + 16);
+        y -= 16; // space before heading
+        const lines = wrapText(block.text, bold, fontSize, contentWidth);
+        for (const line of lines) {
+          ensureSpace(lineHeight);
+          page.drawText(line, { x: marginX, y: y - fontSize, size: fontSize, font: bold, color: rgb(0.1, 0.1, 0.1) });
+          y -= lineHeight;
+        }
+        y -= 6; // space after heading
+        break;
+      }
+      case "heading2": {
+        const fontSize = 18;
+        const lineHeight = fontSize * 1.4;
+        ensureSpace(lineHeight + 14);
+        y -= 14;
+        const lines = wrapText(block.text, bold, fontSize, contentWidth);
+        for (const line of lines) {
+          ensureSpace(lineHeight);
+          page.drawText(line, { x: marginX, y: y - fontSize, size: fontSize, font: bold, color: rgb(0.1, 0.1, 0.1) });
+          y -= lineHeight;
+        }
+        y -= 4;
+        break;
+      }
+      case "heading3": {
+        const fontSize = 14;
+        const lineHeight = fontSize * 1.4;
+        ensureSpace(lineHeight + 10);
+        y -= 10;
+        const lines = wrapText(block.text, bold, fontSize, contentWidth);
+        for (const line of lines) {
+          ensureSpace(lineHeight);
+          page.drawText(line, { x: marginX, y: y - fontSize, size: fontSize, font: bold, color: rgb(0.15, 0.15, 0.15) });
+          y -= lineHeight;
+        }
+        y -= 3;
+        break;
+      }
+      case "paragraph": {
+        const fontSize = 11;
+        const lineHeight = fontSize * 1.6;
+        const lines = wrapText(block.text, regular, fontSize, contentWidth);
+        for (const line of lines) {
+          ensureSpace(lineHeight);
+          page.drawText(line, { x: marginX, y: y - fontSize, size: fontSize, font: regular, color: rgb(0.15, 0.15, 0.15) });
+          y -= lineHeight;
+        }
+        y -= 4; // paragraph spacing
+        break;
+      }
+      case "list-item": {
+        const fontSize = 11;
+        const lineHeight = fontSize * 1.6;
+        const indent = 16;
+        const lines = wrapText(block.text, regular, fontSize, contentWidth - indent);
+        for (const line of lines) {
+          ensureSpace(lineHeight);
+          page.drawText(line, { x: marginX + indent, y: y - fontSize, size: fontSize, font: regular, color: rgb(0.15, 0.15, 0.15) });
+          y -= lineHeight;
+        }
+        y -= 2;
+        break;
+      }
+      case "table-row": {
+        const fontSize = 10;
+        const lineHeight = fontSize * 1.6;
+        const cellFont = block.bold ? bold : regular;
+
+        if (block.cells && block.cells.length > 0) {
+          const colCount = block.cells.length;
+          const colWidth = contentWidth / colCount;
+
+          ensureSpace(lineHeight + 2);
+
+          // Draw row background for header
+          if (block.bold) {
+            page.drawRectangle({
+              x: marginX,
+              y: y - lineHeight - 1,
+              width: contentWidth,
+              height: lineHeight + 2,
+              color: rgb(0.94, 0.94, 0.94),
+            });
+          }
+
+          // Draw cell borders
+          for (let c = 0; c <= colCount; c++) {
+            page.drawLine({
+              start: { x: marginX + c * colWidth, y: y + 1 },
+              end: { x: marginX + c * colWidth, y: y - lineHeight - 1 },
+              thickness: 0.5,
+              color: rgb(0.78, 0.78, 0.78),
+            });
+          }
+          // Top and bottom lines
+          page.drawLine({
+            start: { x: marginX, y: y + 1 },
+            end: { x: marginX + contentWidth, y: y + 1 },
+            thickness: 0.5,
+            color: rgb(0.78, 0.78, 0.78),
+          });
+          page.drawLine({
+            start: { x: marginX, y: y - lineHeight - 1 },
+            end: { x: marginX + contentWidth, y: y - lineHeight - 1 },
+            thickness: 0.5,
+            color: rgb(0.78, 0.78, 0.78),
+          });
+
+          // Draw cell text
+          for (let c = 0; c < colCount; c++) {
+            const cellText = block.cells[c] || "";
+            // Truncate if too wide
+            let displayText = cellText;
+            while (displayText.length > 0 && cellFont.widthOfTextAtSize(displayText, fontSize) > colWidth - 8) {
+              displayText = displayText.slice(0, -1);
+            }
+            if (displayText.length < cellText.length) displayText += "…";
+
+            page.drawText(displayText, {
+              x: marginX + c * colWidth + 4,
+              y: y - fontSize - 1,
+              size: fontSize,
+              font: cellFont,
+              color: rgb(0.15, 0.15, 0.15),
+            });
+          }
+
+          y -= lineHeight + 2;
+        }
+        break;
+      }
+      case "empty-line": {
+        y -= 10;
+        break;
+      }
+    }
+  }
+
+  onProgress?.(95);
+
+  const pdfBytes = await pdfDoc.save();
+  onProgress?.(100);
+
+  return new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
 }
