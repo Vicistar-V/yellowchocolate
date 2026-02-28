@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import mammoth from "mammoth";
+import html2canvas from "html2canvas";
+import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
 import { FileText, ShieldCheck, Zap, ArrowRight, Files } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
@@ -8,7 +10,6 @@ import { FileList } from "@/components/tool/FileList";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
-import { renderHtmlToPdf } from "@/lib/html-to-pdf-renderer";
 import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 
@@ -122,13 +123,67 @@ export default function WordToPdf() {
           }
         }
 
-        const blob = await renderHtmlToPdf(htmlContent, {
-          css: WORD_CSS,
-          onProgress: (p) => {
-            const fileProgress = ((i + p / 100) / files.length) * 100;
-            setProgress(Math.round(fileProgress));
-          },
+        // Render HTML via html2canvas for pixel-perfect layout
+        const A4_WIDTH = 794;
+        const A4_PAGE_HEIGHT = 1123;
+        const SCALE = 2;
+
+        // Create hidden container
+        const container = document.createElement("div");
+        container.style.cssText = `position:fixed;left:-9999px;top:0;width:${A4_WIDTH}px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1a1a1a;padding:40px 50px;box-sizing:border-box;background:white;`;
+        const style = document.createElement("style");
+        style.textContent = WORD_CSS;
+        container.appendChild(style);
+        const content = document.createElement("div");
+        content.innerHTML = htmlContent;
+        container.appendChild(content);
+        document.body.appendChild(container);
+
+        setProgress(Math.round(((i + 0.3) / files.length) * 100));
+
+        // Render to canvas
+        const canvas = await html2canvas(container, {
+          scale: SCALE,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          width: A4_WIDTH,
+          windowWidth: A4_WIDTH,
         });
+
+        document.body.removeChild(container);
+
+        setProgress(Math.round(((i + 0.6) / files.length) * 100));
+
+        // Slice canvas into A4 pages and build PDF
+        const pageHeightPx = A4_PAGE_HEIGHT * SCALE;
+        const totalHeight = canvas.height;
+        const pageWidthPx = A4_WIDTH * SCALE;
+        const pdfDoc = await PDFDocument.create();
+
+        const numPages = Math.max(1, Math.ceil(totalHeight / pageHeightPx));
+        for (let p = 0; p < numPages; p++) {
+          const sliceHeight = Math.min(pageHeightPx, totalHeight - p * pageHeightPx);
+          const sliceCanvas = document.createElement("canvas");
+          sliceCanvas.width = pageWidthPx;
+          sliceCanvas.height = sliceHeight;
+          const ctx = sliceCanvas.getContext("2d")!;
+          ctx.drawImage(canvas, 0, p * pageHeightPx, pageWidthPx, sliceHeight, 0, 0, pageWidthPx, sliceHeight);
+
+          const pngData = sliceCanvas.toDataURL("image/png");
+          const pngBytes = Uint8Array.from(atob(pngData.split(",")[1]), (c) => c.charCodeAt(0));
+          const pngImage = await pdfDoc.embedPng(pngBytes);
+
+          // A4 in points: 595.28 x 841.89
+          const pageHeight = (sliceHeight / pageHeightPx) * 841.89;
+          const page = pdfDoc.addPage([595.28, pageHeight]);
+          page.drawImage(pngImage, { x: 0, y: 0, width: 595.28, height: pageHeight });
+        }
+
+        const pdfBytes = await pdfDoc.save();
+        const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+
+        setProgress(Math.round(((i + 0.9) / files.length) * 100));
 
         const baseName = file.name.replace(/\.(docx?|DOCX?)$/, "");
         pdfBlobs.push({ name: `${baseName}.pdf`, blob });
