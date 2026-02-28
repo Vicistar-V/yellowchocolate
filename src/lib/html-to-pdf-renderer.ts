@@ -32,7 +32,8 @@ export async function renderHtmlToPdf(
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px; line-height: 1.6; padding: 48px;
     box-sizing: border-box;
-    z-index: -99999; opacity: 0; pointer-events: none;
+    z-index: -99999; pointer-events: none;
+    clip-path: inset(0 0 0 0);
     overflow: visible;
   `;
   if (css) {
