@@ -126,8 +126,8 @@ export default function WordToPdf() {
 
         try {
           await renderAsync(buffer, container, styleHost, {
-            inWrapper: false,
-            breakPages: false,
+            inWrapper: true,
+            breakPages: true,
             ignoreWidth: false,
             ignoreHeight: false,
             useBase64URL: true,
@@ -152,42 +152,67 @@ export default function WordToPdf() {
             throw new Error("Render target detached before capture");
           }
 
-          const canvas = await html2canvas(captureTarget, {
-            scale: SCALE,
-            useCORS: true,
-            allowTaint: false,
-            backgroundColor: "#ffffff",
-            windowWidth: A4_WIDTH_PX,
-            width: captureTarget.scrollWidth || A4_WIDTH_PX,
-            height: captureTarget.scrollHeight,
-            scrollX: 0,
-            scrollY: 0,
-          });
+          setProgress(Math.round(((i + 0.55) / files.length) * 100));
 
-          setProgress(Math.round(((i + 0.65) / files.length) * 100));
-
-          const pageHeightPx = Math.round((canvas.width * PDF_PAGE_HEIGHT) / PDF_PAGE_WIDTH);
           const pdfDoc = await PDFDocument.create();
+          const docxPages = Array.from(captureTarget.querySelectorAll(".docx-wrapper > section, .docx > section")) as HTMLElement[];
+          const pageElements = docxPages.filter((el) => el.scrollWidth > 0 && el.scrollHeight > 0);
 
-          const numPages = Math.max(1, Math.ceil(canvas.height / pageHeightPx));
-          for (let p = 0; p < numPages; p++) {
-            const yOffset = p * pageHeightPx;
-            const sliceHeight = Math.min(pageHeightPx, canvas.height - yOffset);
+          if (pageElements.length > 0) {
+            for (const pageEl of pageElements) {
+              const pageCanvas = await html2canvas(pageEl, {
+                scale: SCALE,
+                useCORS: true,
+                allowTaint: false,
+                backgroundColor: "#ffffff",
+                windowWidth: pageEl.scrollWidth || A4_WIDTH_PX,
+                width: pageEl.scrollWidth || A4_WIDTH_PX,
+                height: pageEl.scrollHeight,
+                scrollX: 0,
+                scrollY: 0,
+              });
 
-            const sliceCanvas = document.createElement("canvas");
-            sliceCanvas.width = canvas.width;
-            sliceCanvas.height = sliceHeight;
-            const ctx = sliceCanvas.getContext("2d");
-            if (!ctx) throw new Error("Could not render PDF page slice");
+              const pngImage = await pdfDoc.embedPng(await canvasToPngBytes(pageCanvas));
+              const pageHeight = (pageCanvas.height * PDF_PAGE_WIDTH) / pageCanvas.width;
+              const page = pdfDoc.addPage([PDF_PAGE_WIDTH, pageHeight]);
+              page.drawImage(pngImage, { x: 0, y: 0, width: PDF_PAGE_WIDTH, height: pageHeight });
+            }
+          } else {
+            const canvas = await html2canvas(captureTarget, {
+              scale: SCALE,
+              useCORS: true,
+              allowTaint: false,
+              backgroundColor: "#ffffff",
+              windowWidth: A4_WIDTH_PX,
+              width: captureTarget.scrollWidth || A4_WIDTH_PX,
+              height: captureTarget.scrollHeight,
+              scrollX: 0,
+              scrollY: 0,
+            });
 
-            ctx.drawImage(canvas, 0, yOffset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+            const pageHeightPx = Math.round((canvas.width * PDF_PAGE_HEIGHT) / PDF_PAGE_WIDTH);
+            const numPages = Math.max(1, Math.ceil(canvas.height / pageHeightPx));
 
-            const pngImage = await pdfDoc.embedPng(await canvasToPngBytes(sliceCanvas));
-            const pageHeight = (sliceHeight / pageHeightPx) * PDF_PAGE_HEIGHT;
-            const page = pdfDoc.addPage([PDF_PAGE_WIDTH, pageHeight]);
-            page.drawImage(pngImage, { x: 0, y: 0, width: PDF_PAGE_WIDTH, height: pageHeight });
+            for (let p = 0; p < numPages; p++) {
+              const yOffset = p * pageHeightPx;
+              const sliceHeight = Math.min(pageHeightPx, canvas.height - yOffset);
+
+              const sliceCanvas = document.createElement("canvas");
+              sliceCanvas.width = canvas.width;
+              sliceCanvas.height = sliceHeight;
+              const ctx = sliceCanvas.getContext("2d");
+              if (!ctx) throw new Error("Could not render PDF page slice");
+
+              ctx.drawImage(canvas, 0, yOffset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+              const pngImage = await pdfDoc.embedPng(await canvasToPngBytes(sliceCanvas));
+              const pageHeight = (sliceHeight / pageHeightPx) * PDF_PAGE_HEIGHT;
+              const page = pdfDoc.addPage([PDF_PAGE_WIDTH, pageHeight]);
+              page.drawImage(pngImage, { x: 0, y: 0, width: PDF_PAGE_WIDTH, height: pageHeight });
+            }
           }
 
+          setProgress(Math.round(((i + 0.65) / files.length) * 100));
           const pdfBytes = await pdfDoc.save();
           const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
 
