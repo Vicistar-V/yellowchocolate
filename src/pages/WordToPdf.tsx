@@ -126,6 +126,7 @@ export default function WordToPdf() {
         renderRoot.appendChild(container);
 
         try {
+          console.log("[WordToPdf] renderAsync START");
           await renderAsync(buffer, content, container, {
             inWrapper: false,
             breakPages: false,
@@ -136,9 +137,17 @@ export default function WordToPdf() {
             renderFooters: true,
             experimental: true,
           });
+          console.log("[WordToPdf] renderAsync END");
 
+          console.log("[WordToPdf] waiting for images...");
           await Promise.all(Array.from(container.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
+          console.log("[WordToPdf] images loaded");
+
           await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+          console.log("[WordToPdf] content in DOM:", document.body.contains(content));
+          console.log("[WordToPdf] content dimensions:", content.scrollWidth, "x", content.scrollHeight);
+          console.log("[WordToPdf] renderRoot in DOM:", document.body.contains(renderRoot));
 
           setProgress(Math.round(((i + 0.35) / files.length) * 100));
 
@@ -146,6 +155,7 @@ export default function WordToPdf() {
             throw new Error("Render target detached before capture");
           }
 
+          console.log("[WordToPdf] html2canvas START");
           const canvas = await html2canvas(content, {
             scale: SCALE,
             useCORS: true,
@@ -157,6 +167,7 @@ export default function WordToPdf() {
             scrollX: 0,
             scrollY: 0,
           });
+          console.log("[WordToPdf] html2canvas END, canvas:", canvas.width, "x", canvas.height);
 
           setProgress(Math.round(((i + 0.65) / files.length) * 100));
 
