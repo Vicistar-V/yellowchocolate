@@ -8,6 +8,7 @@ import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
 import { renderHtmlToPdf } from "@/lib/html-to-pdf-renderer";
+import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 
 type Step = "upload" | "ready" | "processing" | "done";
@@ -128,13 +129,9 @@ export default function HtmlToPdf() {
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
     const isZip = convertedCount > 1;
-    a.download = isZip ? "html-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(html?|HTML?)$/, "")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = isZip ? "html-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(html?|HTML?)$/, "")}.pdf`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {
