@@ -40,7 +40,7 @@ async function pdfToXlsx(buffer: ArrayBuffer, onProgress?: (p: number) => void):
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
 
-    const lineMap = new Map<number, { x: number; text: string }[]>();
+    const lineMap = new Map<number, { x: number; text: string; width: number }[]>();
 
     for (const item of content.items) {
       if (!("str" in item) || !(item as any).str.trim()) continue;
@@ -49,7 +49,7 @@ async function pdfToXlsx(buffer: ArrayBuffer, onProgress?: (p: number) => void):
       const x = Math.round(textItem.transform[4]);
 
       if (!lineMap.has(y)) lineMap.set(y, []);
-      lineMap.get(y)!.push({ x, text: textItem.str });
+      lineMap.get(y)!.push({ x, text: textItem.str, width: textItem.width || (textItem.str.length * 5) });
     }
 
     const sortedYs = Array.from(lineMap.keys()).sort((a, b) => b - a);
@@ -64,12 +64,13 @@ async function pdfToXlsx(buffer: ArrayBuffer, onProgress?: (p: number) => void):
 
       for (const item of items) {
         const gap = item.x - prevEnd;
-        if (gap > 20 && currentCell) {
+        // Use actual item width for better column detection
+        if (gap > 15 && currentCell) {
           row.push(currentCell.trim());
           currentCell = "";
         }
         currentCell += item.text;
-        prevEnd = item.x + item.text.length * 5;
+        prevEnd = item.x + item.width;
       }
       if (currentCell.trim()) row.push(currentCell.trim());
       if (row.length > 0) rows.push(row);

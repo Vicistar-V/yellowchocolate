@@ -62,7 +62,7 @@ async function extractPdfText(buffer: ArrayBuffer, onProgress?: (p: number) => v
 }
 
 /** Render a PDF page to a PNG image buffer for fallback */
-async function renderPageToImage(pdf: any, pageNum: number): Promise<Uint8Array> {
+async function renderPageToImage(pdf: any, pageNum: number): Promise<{ data: Uint8Array; width: number; height: number }> {
   const page = await pdf.getPage(pageNum);
   const scale = 2;
   const viewport = page.getViewport({ scale });
@@ -75,7 +75,11 @@ async function renderPageToImage(pdf: any, pageNum: number): Promise<Uint8Array>
   const dataUrl = canvas.toDataURL("image/png");
   const response = await fetch(dataUrl);
   const arrayBuf = await response.arrayBuffer();
-  return new Uint8Array(arrayBuf);
+  return {
+    data: new Uint8Array(arrayBuf),
+    width: viewport.width,
+    height: viewport.height,
+  };
 }
 
 async function buildDocx(
@@ -113,15 +117,20 @@ async function buildDocx(
         }
       }
 
-      // Add page image
+      // Add page image with correct aspect ratio
       try {
-        const imgData = await renderPageToImage(pdf, pageIdx + 1);
+        const imgResult = await renderPageToImage(pdf, pageIdx + 1);
+        // Scale to fit within 595pt wide (A4), preserving aspect ratio
+        const aspect = imgResult.height / imgResult.width;
+        const docWidth = 595;
+        const docHeight = Math.round(docWidth * aspect);
+
         paragraphs.push(
           new Paragraph({
             children: [
               new ImageRun({
-                data: imgData,
-                transformation: { width: 595, height: 842 },
+                data: imgResult.data,
+                transformation: { width: docWidth, height: docHeight },
                 type: "png",
               }),
             ],
