@@ -27,13 +27,12 @@ export async function renderHtmlToPdf(
   // Create hidden container — use clip instead of extreme offsets for reliable rendering
   const container = document.createElement("div");
   container.style.cssText = `
-    position: fixed; left: 0; top: 0;
+    position: fixed; left: -9999px; top: -9999px;
     width: ${pageWidth}px; background: white; color: black;
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px; line-height: 1.6; padding: 48px;
     box-sizing: border-box;
-    z-index: -99999; pointer-events: none;
-    clip-path: inset(0 0 0 0);
+    pointer-events: none;
     overflow: visible;
   `;
   if (css) {
