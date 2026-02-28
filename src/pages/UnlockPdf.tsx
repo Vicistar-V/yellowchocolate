@@ -1,6 +1,12 @@
 import { useState, useCallback } from "react";
 import { PDFDocument } from "pdf-lib";
+import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 import {
   Unlock, Lock, ShieldCheck, Zap, Files, ArrowRight,
   Download, Trash2, FileText, CheckCircle2, Eye, EyeOff, KeyRound,
@@ -88,13 +94,19 @@ export default function UnlockPdf() {
     updateItem(item.id, { verifying: true, error: null });
     try {
       const buffer = await item.file.arrayBuffer();
-      // pdf-lib uses ignoreEncryption; we store the password for user reference
-      // and verify the file is loadable
-      await PDFDocument.load(buffer, { ignoreEncryption: true });
+      // Use pdfjs-dist to actually verify the password
+      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer), password: item.password });
+      const pdf = await loadingTask.promise;
+      // If we get here, the password was correct (or the PDF wasn't encrypted)
+      await pdf.destroy();
       updateItem(item.id, { verified: true, verifying: false, error: null });
       toast.success(`Password accepted for ${item.file.name}`);
     } catch (err: any) {
-      updateItem(item.id, { verified: false, verifying: false, error: "Could not read this PDF — the file may be corrupted." });
+      if (err?.name === "PasswordException") {
+        updateItem(item.id, { verified: false, verifying: false, error: "Incorrect password — please try again." });
+      } else {
+        updateItem(item.id, { verified: false, verifying: false, error: "Could not read this PDF — the file may be corrupted." });
+      }
     }
   }, [updateItem]);
 
