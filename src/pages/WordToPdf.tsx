@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import html2canvas from "html2canvas";
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
@@ -53,7 +53,7 @@ export default function WordToPdf() {
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [convertedCount, setConvertedCount] = useState(0);
-  const renderHostRef = useRef<HTMLDivElement | null>(null);
+  
 
   const handleFilesSelected = useCallback(
     async (newFiles: File[]) => {
@@ -108,9 +108,12 @@ export default function WordToPdf() {
         const PDF_PAGE_WIDTH = 595.28;
         const PDF_PAGE_HEIGHT = 841.89;
 
-        const host = renderHostRef.current ?? document.body;
+        const renderRoot = document.createElement("div");
+        renderRoot.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;opacity:0;pointer-events:none;z-index:-9999;overflow:visible;";
+        document.body.appendChild(renderRoot);
+
         const container = document.createElement("div");
-        container.style.cssText = `position:relative;width:${A4_WIDTH_PX}px;background:#fff;overflow:hidden;`;
+        container.style.cssText = `position:relative;width:${A4_WIDTH_PX}px;min-height:1px;background:#fff;overflow:visible;`;
 
         const style = document.createElement("style");
         style.textContent = DOCX_RENDER_CSS;
@@ -120,7 +123,7 @@ export default function WordToPdf() {
         content.style.cssText = "background:#fff;";
         container.appendChild(content);
 
-        host.appendChild(container);
+        renderRoot.appendChild(container);
 
         try {
           await renderAsync(buffer, content, container, {
@@ -138,6 +141,10 @@ export default function WordToPdf() {
           await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
           setProgress(Math.round(((i + 0.35) / files.length) * 100));
+
+          if (!document.body.contains(content)) {
+            throw new Error("Render target detached before capture");
+          }
 
           const canvas = await html2canvas(content, {
             scale: SCALE,
@@ -183,7 +190,7 @@ export default function WordToPdf() {
           const baseName = file.name.replace(/\.(docx?|DOCX?)$/, "");
           pdfBlobs.push({ name: `${baseName}.pdf`, blob });
         } finally {
-          container.remove();
+          renderRoot.remove();
         }
       }
 
@@ -323,7 +330,7 @@ export default function WordToPdf() {
           resetLabel="Convert More"
         />
       )}
-      <div ref={renderHostRef} aria-hidden className="fixed left-0 top-0 w-[1px] h-[1px] overflow-hidden opacity-0 pointer-events-none -z-10" />
+      
     </ToolPageLayout>
   );
 }
