@@ -6,10 +6,11 @@ import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
  */
 
 interface TextBlock {
-  type: "heading1" | "heading2" | "heading3" | "paragraph" | "list-item" | "table-row" | "empty-line";
+  type: "heading1" | "heading2" | "heading3" | "paragraph" | "list-item" | "table-row" | "empty-line" | "image";
   text: string;
   cells?: string[]; // for table rows
   bold?: boolean;
+  imageDataUrl?: string; // for embedded images (base64 data URI)
 }
 
 /** Parse HTML string into structured text blocks */
@@ -50,9 +51,9 @@ function parseHtmlToBlocks(html: string): TextBlock[] {
       case "span":
       case "section":
       case "article": {
-        // Check if it contains block-level children
+        // Check if it contains block-level children or images
         const hasBlockChildren = Array.from(el.children).some((c) =>
-          ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "table", "ul", "ol", "blockquote"].includes(c.tagName.toLowerCase())
+          ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "table", "ul", "ol", "blockquote", "img"].includes(c.tagName.toLowerCase())
         );
         if (hasBlockChildren) {
           Array.from(el.childNodes).forEach(processNode);
@@ -61,6 +62,13 @@ function parseHtmlToBlocks(html: string): TextBlock[] {
           if (text) {
             blocks.push({ type: "paragraph", text });
           }
+        }
+        break;
+      }
+      case "img": {
+        const src = el.getAttribute("src");
+        if (src && src.startsWith("data:image/")) {
+          blocks.push({ type: "image", text: "", imageDataUrl: src });
         }
         break;
       }
@@ -376,6 +384,41 @@ export async function renderHtmlToPdf(
       }
       case "empty-line": {
         y -= 10;
+        break;
+      }
+      case "image": {
+        if (block.imageDataUrl) {
+          try {
+            const dataUrl = block.imageDataUrl;
+            const isPng = dataUrl.startsWith("data:image/png");
+            // Extract base64 data
+            const base64 = dataUrl.split(",")[1];
+            if (base64) {
+              const binaryStr = atob(base64);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let b = 0; b < binaryStr.length; b++) {
+                bytes[b] = binaryStr.charCodeAt(b);
+              }
+
+              const embeddedImg = isPng
+                ? await pdfDoc.embedPng(bytes)
+                : await pdfDoc.embedJpg(bytes);
+
+              const maxW = contentWidth;
+              const maxH = 300;
+              const scale = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height, 1);
+              const drawW = embeddedImg.width * scale;
+              const drawH = embeddedImg.height * scale;
+
+              ensureSpace(drawH + 12);
+              const drawX = marginX + (contentWidth - drawW) / 2;
+              page.drawImage(embeddedImg, { x: drawX, y: y - drawH, width: drawW, height: drawH });
+              y -= drawH + 12;
+            }
+          } catch {
+            // Skip unsupported image formats silently
+          }
+        }
         break;
       }
     }
