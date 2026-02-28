@@ -48,16 +48,47 @@ function parseHtmlToBlocks(html: string): TextBlock[] {
         break;
       case "p":
       case "div":
-      case "span":
       case "section":
       case "article": {
-        // Check if it contains block-level children or images
+        // Check if it contains block-level children
         const hasBlockChildren = Array.from(el.children).some((c) =>
-          ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "table", "ul", "ol", "blockquote", "img"].includes(c.tagName.toLowerCase())
+          ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "table", "ul", "ol", "blockquote"].includes(c.tagName.toLowerCase())
         );
         if (hasBlockChildren) {
           Array.from(el.childNodes).forEach(processNode);
         } else {
+          // Extract images inside this block first
+          const imgs = el.querySelectorAll("img");
+          imgs.forEach((img) => {
+            const src = img.getAttribute("src");
+            if (src) {
+              blocks.push({ type: "image", text: "", imageDataUrl: src });
+            }
+          });
+          // Get full text content (preserves inline elements like <strong>, <em>, <a>)
+          const text = el.textContent?.trim();
+          if (text) {
+            blocks.push({ type: "paragraph", text });
+          }
+        }
+        break;
+      }
+      case "span":
+      case "strong":
+      case "b":
+      case "em":
+      case "i":
+      case "a":
+      case "u":
+      case "mark":
+      case "small":
+      case "sub":
+      case "sup": {
+        // Inline elements — don't create separate blocks, they'll be captured
+        // by their parent's textContent. Only create a block if orphaned (no block parent).
+        const parentTag = el.parentElement?.tagName.toLowerCase();
+        const isOrphaned = !parentTag || ["div", "body", "section", "article"].includes(parentTag);
+        if (isOrphaned) {
           const text = el.textContent?.trim();
           if (text) {
             blocks.push({ type: "paragraph", text });
@@ -67,7 +98,7 @@ function parseHtmlToBlocks(html: string): TextBlock[] {
       }
       case "img": {
         const src = el.getAttribute("src");
-        if (src && src.startsWith("data:image/")) {
+        if (src) {
           blocks.push({ type: "image", text: "", imageDataUrl: src });
         }
         break;
@@ -115,18 +146,6 @@ function parseHtmlToBlocks(html: string): TextBlock[] {
           text.split("\n").forEach((line) => {
             blocks.push({ type: "paragraph", text: line || " " });
           });
-        }
-        break;
-      }
-      case "strong":
-      case "b":
-      case "em":
-      case "i":
-      case "a":
-      case "u": {
-        const text = el.textContent?.trim();
-        if (text) {
-          blocks.push({ type: "paragraph", text });
         }
         break;
       }
@@ -389,34 +408,70 @@ export async function renderHtmlToPdf(
       case "image": {
         if (block.imageDataUrl) {
           try {
-            const dataUrl = block.imageDataUrl;
-            const isPng = dataUrl.startsWith("data:image/png");
-            // Extract base64 data
-            const base64 = dataUrl.split(",")[1];
-            if (base64) {
-              const binaryStr = atob(base64);
-              const bytes = new Uint8Array(binaryStr.length);
-              for (let b = 0; b < binaryStr.length; b++) {
-                bytes[b] = binaryStr.charCodeAt(b);
+            let imgBytes: Uint8Array | null = null;
+            let isPng = false;
+
+            const src = block.imageDataUrl;
+
+            if (src.startsWith("data:image/")) {
+              // Base64 data URI (from mammoth/docx)
+              isPng = src.startsWith("data:image/png");
+              const base64 = src.split(",")[1];
+              if (base64) {
+                const binaryStr = atob(base64);
+                imgBytes = new Uint8Array(binaryStr.length);
+                for (let b = 0; b < binaryStr.length; b++) {
+                  imgBytes[b] = binaryStr.charCodeAt(b);
+                }
+              }
+            } else if (src.startsWith("http://") || src.startsWith("https://")) {
+              // External URL — fetch the image
+              try {
+                const response = await fetch(src, { mode: "cors" });
+                if (response.ok) {
+                  const contentType = response.headers.get("content-type") || "";
+                  isPng = contentType.includes("png");
+                  const buffer = await response.arrayBuffer();
+                  imgBytes = new Uint8Array(buffer);
+                }
+              } catch {
+                // CORS or network error — skip
+              }
+            }
+
+            if (imgBytes && imgBytes.length > 0) {
+              // Try PNG first, then JPG — pdf-lib only supports these two
+              let embeddedImg;
+              try {
+                embeddedImg = isPng
+                  ? await pdfDoc.embedPng(imgBytes)
+                  : await pdfDoc.embedJpg(imgBytes);
+              } catch {
+                // Format mismatch — try the other format
+                try {
+                  embeddedImg = isPng
+                    ? await pdfDoc.embedJpg(imgBytes)
+                    : await pdfDoc.embedPng(imgBytes);
+                } catch {
+                  // Truly unsupported format (gif, svg, etc.)
+                }
               }
 
-              const embeddedImg = isPng
-                ? await pdfDoc.embedPng(bytes)
-                : await pdfDoc.embedJpg(bytes);
+              if (embeddedImg) {
+                const maxW = contentWidth;
+                const maxH = 300;
+                const scale = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height, 1);
+                const drawW = embeddedImg.width * scale;
+                const drawH = embeddedImg.height * scale;
 
-              const maxW = contentWidth;
-              const maxH = 300;
-              const scale = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height, 1);
-              const drawW = embeddedImg.width * scale;
-              const drawH = embeddedImg.height * scale;
-
-              ensureSpace(drawH + 12);
-              const drawX = marginX + (contentWidth - drawW) / 2;
-              page.drawImage(embeddedImg, { x: drawX, y: y - drawH, width: drawW, height: drawH });
-              y -= drawH + 12;
+                ensureSpace(drawH + 12);
+                const drawX = marginX + (contentWidth - drawW) / 2;
+                page.drawImage(embeddedImg, { x: drawX, y: y - drawH, width: drawW, height: drawH });
+                y -= drawH + 12;
+              }
             }
           } catch {
-            // Skip unsupported image formats silently
+            // Skip problematic images silently
           }
         }
         break;
