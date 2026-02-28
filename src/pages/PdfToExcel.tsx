@@ -9,6 +9,8 @@ import { FileList } from "@/components/tool/FileList";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
+import { downloadBlob } from "@/lib/download-utils";
+import { isExtractionPoor } from "@/lib/extraction-quality";
 import { toast } from "sonner";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -29,20 +31,15 @@ const TRUST_BADGES = [
 
 const ACCEPT = "application/pdf,.pdf";
 
-interface TextLine {
-  y: number;
-  items: { x: number; text: string }[];
-}
-
 async function pdfToXlsx(buffer: ArrayBuffer, onProgress?: (p: number) => void): Promise<Blob> {
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
   const wb = XLSX.utils.book_new();
+  let hasAnyContent = false;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
 
-    // Group text items by Y position to reconstruct rows
     const lineMap = new Map<number, { x: number; text: string }[]>();
 
     for (const item of content.items) {
@@ -55,15 +52,12 @@ async function pdfToXlsx(buffer: ArrayBuffer, onProgress?: (p: number) => void):
       lineMap.get(y)!.push({ x, text: textItem.str });
     }
 
-    // Sort lines by Y (descending = top-to-bottom in PDF coords)
     const sortedYs = Array.from(lineMap.keys()).sort((a, b) => b - a);
 
-    // Build rows: split each line into columns by X gaps
     const rows: string[][] = [];
     for (const y of sortedYs) {
       const items = lineMap.get(y)!.sort((a, b) => a.x - b.x);
 
-      // Detect column boundaries using gaps
       const row: string[] = [];
       let prevEnd = -Infinity;
       let currentCell = "";
@@ -75,17 +69,37 @@ async function pdfToXlsx(buffer: ArrayBuffer, onProgress?: (p: number) => void):
           currentCell = "";
         }
         currentCell += item.text;
-        prevEnd = item.x + item.text.length * 5; // approximate char width
+        prevEnd = item.x + item.text.length * 5;
       }
       if (currentCell.trim()) row.push(currentCell.trim());
       if (row.length > 0) rows.push(row);
     }
 
+    // Check quality for this page
+    const pageText = rows.map((r) => r.join(" ")).join(" ");
+    const poor = isExtractionPoor(pageText);
+
+    let sheetData: any[][];
+    if (rows.length === 0 || poor) {
+      sheetData = [
+        ["Page " + i + (poor ? " (limited text extraction — page may be scanned)" : "")],
+        ...(rows.length > 0 ? rows : [["(No extractable text content on this page)"]]),
+      ];
+      if (rows.length > 0) hasAnyContent = true;
+    } else {
+      sheetData = rows;
+      hasAnyContent = true;
+    }
+
     const sheetName = pdf.numPages > 1 ? `Page ${i}` : "Sheet1";
-    const ws = XLSX.utils.aoa_to_sheet(rows.length > 0 ? rows : [["(No text content on this page)"]]);
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
     XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
 
     onProgress?.(Math.round((i / pdf.numPages) * 90));
+  }
+
+  if (!hasAnyContent) {
+    toast.info("PDF appears to be scanned/image-based — limited text was extracted");
   }
 
   const xlsxBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -164,19 +178,15 @@ export default function PdfToExcel() {
       toast.success(`Converted ${results.length} file${results.length > 1 ? "s" : ""} to Excel`);
     } catch (err) {
       console.error("PDF to Excel failed:", err);
-      toast.error("Conversion failed", { description: "Could not process one or more files." });
+      toast.error("Conversion failed", { description: String(err instanceof Error ? err.message : "Could not process one or more files.") });
       setStep("ready");
     }
   }, [files]);
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = convertedCount > 1 ? "pdf-to-excel.zip" : `${files[0]?.file.name.replace(/\.pdf$/i, "")}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = convertedCount > 1 ? "pdf-to-excel.zip" : `${files[0]?.file.name.replace(/\.pdf$/i, "")}.xlsx`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {

@@ -11,8 +11,8 @@ export async function renderHtmlToPdf(
   options?: {
     css?: string;
     onProgress?: (progress: number) => void;
-    pageWidth?: number;    // render width in px (default 794 ≈ A4 at 96dpi)
-    pageHeight?: number;   // page height in px for splitting (default 1123 ≈ A4)
+    pageWidth?: number;
+    pageHeight?: number;
   }
 ): Promise<Blob> {
   const {
@@ -24,14 +24,16 @@ export async function renderHtmlToPdf(
 
   onProgress?.(5);
 
-  // Create hidden container
+  // Create hidden container — use clip instead of extreme offsets for reliable rendering
   const container = document.createElement("div");
   container.style.cssText = `
-    position: fixed; top: -99999px; left: -99999px;
+    position: fixed; left: 0; top: 0;
     width: ${pageWidth}px; background: white; color: black;
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px; line-height: 1.6; padding: 48px;
     box-sizing: border-box;
+    z-index: -99999; opacity: 0; pointer-events: none;
+    overflow: visible;
   `;
   if (css) {
     const style = document.createElement("style");
@@ -44,9 +46,35 @@ export async function renderHtmlToPdf(
   container.appendChild(content);
   document.body.appendChild(container);
 
-  onProgress?.(15);
+  onProgress?.(10);
 
   try {
+    // Wait for fonts
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
+    // Wait for all images to load
+    const images = container.querySelectorAll("img");
+    if (images.length > 0) {
+      await Promise.all(
+        Array.from(images).map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete) return resolve();
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+              setTimeout(resolve, 3000);
+            })
+        )
+      );
+    }
+
+    // Small layout settle delay
+    await new Promise((r) => setTimeout(r, 100));
+
+    onProgress?.(15);
+
     // Render to canvas
     const canvas = await html2canvas(container, {
       scale: 2,
@@ -59,6 +87,31 @@ export async function renderHtmlToPdf(
 
     onProgress?.(50);
 
+    // Guard: detect blank canvas
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const sample = ctx.getImageData(0, 0, canvas.width, Math.min(100, canvas.height));
+      let nonWhitePixels = 0;
+      for (let i = 0; i < sample.data.length; i += 4) {
+        if (sample.data[i] < 250 || sample.data[i + 1] < 250 || sample.data[i + 2] < 250) {
+          nonWhitePixels++;
+        }
+      }
+      if (nonWhitePixels < 10 && canvas.height > 200) {
+        // Canvas appears blank — check full height
+        const fullSample = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let totalNonWhite = 0;
+        for (let i = 0; i < fullSample.data.length; i += 16) {
+          if (fullSample.data[i] < 250 || fullSample.data[i + 1] < 250 || fullSample.data[i + 2] < 250) {
+            totalNonWhite++;
+          }
+        }
+        if (totalNonWhite < 50) {
+          throw new Error("Rendered content appears blank. The document may be empty or unsupported.");
+        }
+      }
+    }
+
     // Split canvas into pages
     const canvasWidth = canvas.width;
     const canvasHeight = canvas.height;
@@ -66,7 +119,7 @@ export async function renderHtmlToPdf(
     const totalPages = Math.max(1, Math.ceil(canvasHeight / scaledPageHeight));
 
     const pdfDoc = await PDFDocument.create();
-    const a4Width = 595.28;  // A4 in PDF points
+    const a4Width = 595.28;
     const a4Height = 841.89;
 
     for (let i = 0; i < totalPages; i++) {
@@ -75,10 +128,10 @@ export async function renderHtmlToPdf(
       const sliceHeight = Math.min(scaledPageHeight, canvasHeight - i * scaledPageHeight);
       pageCanvas.height = sliceHeight;
 
-      const ctx = pageCanvas.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-      ctx.drawImage(
+      const pCtx = pageCanvas.getContext("2d")!;
+      pCtx.fillStyle = "#ffffff";
+      pCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      pCtx.drawImage(
         canvas,
         0, i * scaledPageHeight,
         canvasWidth, sliceHeight,

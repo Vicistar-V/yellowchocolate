@@ -9,6 +9,7 @@ import { FileList } from "@/components/tool/FileList";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
+import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -32,34 +33,65 @@ const ACCEPT = "application/pdf,.pdf";
 async function pdfToPptx(buffer: ArrayBuffer, onProgress?: (p: number) => void): Promise<Blob> {
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
   const pptx = new PptxGenJS();
+  // Set default slide size to match standard 16:9
+  pptx.defineLayout({ name: "LAYOUT_WIDE", width: 13.33, height: 7.5 });
+  pptx.layout = "LAYOUT_WIDE";
 
   for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
+    try {
+      const page = await pdf.getPage(i);
+      const scale = 2.5; // Higher scale for better quality
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
-    // Render page to canvas as image
-    const scale = 2;
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d")!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      const slide = pptx.addSlide();
 
-    const slide = pptx.addSlide();
-    slide.addImage({
-      data: dataUrl,
-      x: 0,
-      y: 0,
-      w: "100%",
-      h: "100%",
-    });
+      // Calculate aspect-fit dimensions
+      const pageAspect = viewport.width / viewport.height;
+      const slideAspect = 13.33 / 7.5;
+      let imgW: number, imgH: number, imgX: number, imgY: number;
+
+      if (pageAspect > slideAspect) {
+        imgW = 13.33;
+        imgH = 13.33 / pageAspect;
+        imgX = 0;
+        imgY = (7.5 - imgH) / 2;
+      } else {
+        imgH = 7.5;
+        imgW = 7.5 * pageAspect;
+        imgX = (13.33 - imgW) / 2;
+        imgY = 0;
+      }
+
+      slide.addImage({
+        data: dataUrl,
+        x: imgX,
+        y: imgY,
+        w: imgW,
+        h: imgH,
+      });
+    } catch (err) {
+      console.warn(`Failed to render page ${i}:`, err);
+      const slide = pptx.addSlide();
+      slide.addText(`Page ${i} — could not be rendered`, {
+        x: 1, y: 3, w: 8, h: 1,
+        fontSize: 18, color: "999999", italic: true, align: "center",
+      });
+    }
 
     onProgress?.(Math.round((i / pdf.numPages) * 90));
   }
 
   const arrayBuffer = await pptx.write({ outputType: "arraybuffer" }) as ArrayBuffer;
+  onProgress?.(100);
   return new Blob([arrayBuffer], {
     type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   });
@@ -135,19 +167,15 @@ export default function PdfToPowerPoint() {
       toast.success(`Converted ${results.length} file${results.length > 1 ? "s" : ""} to PowerPoint`);
     } catch (err) {
       console.error("PDF to PowerPoint failed:", err);
-      toast.error("Conversion failed", { description: "Could not process one or more files." });
+      toast.error("Conversion failed", { description: String(err instanceof Error ? err.message : "Could not process one or more files.") });
       setStep("ready");
     }
   }, [files]);
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = convertedCount > 1 ? "pdf-to-pptx.zip" : `${files[0]?.file.name.replace(/\.pdf$/i, "")}.pptx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = convertedCount > 1 ? "pdf-to-pptx.zip" : `${files[0]?.file.name.replace(/\.pdf$/i, "")}.pptx`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {
