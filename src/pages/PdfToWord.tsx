@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import * as pdfjsLib from "pdfjs-dist";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } from "docx";
 import JSZip from "jszip";
 import { FileDown, ShieldCheck, Zap, ArrowRight, Files } from "lucide-react";
 import { ToolPageLayout } from "@/components/tool/ToolPageLayout";
@@ -9,6 +9,8 @@ import { FileList } from "@/components/tool/FileList";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
+import { downloadBlob } from "@/lib/download-utils";
+import { isPagesExtractionPoor } from "@/lib/extraction-quality";
 import { toast } from "sonner";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -53,17 +55,105 @@ async function extractPdfText(buffer: ArrayBuffer, onProgress?: (p: number) => v
     }
     if (currentLine.trim()) lines.push(currentLine.trim());
     pages.push(lines);
-    onProgress?.(Math.round((i / pdf.numPages) * 90));
+    onProgress?.(Math.round((i / pdf.numPages) * 70));
   }
 
   return pages;
 }
 
-function buildDocx(pages: string[][]): Promise<Blob> {
+/** Render a PDF page to a PNG image buffer for fallback */
+async function renderPageToImage(pdf: any, pageNum: number): Promise<Uint8Array> {
+  const page = await pdf.getPage(pageNum);
+  const scale = 2;
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d")!;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  const dataUrl = canvas.toDataURL("image/png");
+  const response = await fetch(dataUrl);
+  const arrayBuf = await response.arrayBuffer();
+  return new Uint8Array(arrayBuf);
+}
+
+async function buildDocx(
+  pages: string[][],
+  buffer: ArrayBuffer,
+  onProgress?: (p: number) => void
+): Promise<Blob> {
+  const poorQuality = isPagesExtractionPoor(pages);
+
+  if (poorQuality) {
+    // Fallback: include page images in DOCX
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const sections: any[] = [];
+
+    for (let pageIdx = 0; pageIdx < pdf.numPages; pageIdx++) {
+      const paragraphs: Paragraph[] = [];
+
+      paragraphs.push(
+        new Paragraph({
+          heading: HeadingLevel.HEADING_2,
+          children: [new TextRun({ text: `Page ${pageIdx + 1}`, bold: true, size: 28 })],
+        })
+      );
+
+      // Add any extracted text
+      const lines = pages[pageIdx] || [];
+      if (lines.length > 0) {
+        for (const line of lines) {
+          paragraphs.push(
+            new Paragraph({
+              children: [new TextRun({ text: line, size: 24 })],
+              spacing: { after: 120 },
+            })
+          );
+        }
+      }
+
+      // Add page image
+      try {
+        const imgData = await renderPageToImage(pdf, pageIdx + 1);
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: imgData,
+                transformation: { width: 595, height: 842 },
+                type: "png",
+              }),
+            ],
+          })
+        );
+      } catch {
+        paragraphs.push(
+          new Paragraph({
+            children: [new TextRun({ text: "(Could not render page image)", italics: true, color: "999999", size: 22 })],
+          })
+        );
+      }
+
+      paragraphs.push(
+        new Paragraph({
+          children: [new TextRun({ text: "⚠ This page appears to be scanned/image-based. Text extraction may be limited.", italics: true, color: "888888", size: 20 })],
+          spacing: { after: 200 },
+        })
+      );
+
+      sections.push({ children: paragraphs });
+      onProgress?.(70 + Math.round(((pageIdx + 1) / pdf.numPages) * 25));
+    }
+
+    const doc = new Document({ sections });
+    return Packer.toBlob(doc);
+  }
+
+  // Normal text-based DOCX
   const sections = pages.map((lines, pageIdx) => {
     const paragraphs: Paragraph[] = [];
 
-    // Page header
     if (pages.length > 1) {
       paragraphs.push(
         new Paragraph({
@@ -89,6 +179,7 @@ function buildDocx(pages: string[][]): Promise<Blob> {
     return { children: paragraphs };
   });
 
+  onProgress?.(95);
   const doc = new Document({ sections });
   return Packer.toBlob(doc);
 }
@@ -139,7 +230,15 @@ export default function PdfToWord() {
           setProgress(Math.round(fileProgress));
         });
 
-        const blob = await buildDocx(pages);
+        const blob = await buildDocx(pages, buffer, (p) => {
+          const fileProgress = ((i + p / 100) / files.length) * 100;
+          setProgress(Math.round(fileProgress));
+        });
+
+        if (isPagesExtractionPoor(pages)) {
+          toast.info(`"${file.name}" appears scanned — page images included in output`);
+        }
+
         const baseName = file.name.replace(/\.pdf$/i, "");
         results.push({ name: `${baseName}.docx`, blob });
       }
@@ -166,19 +265,15 @@ export default function PdfToWord() {
       toast.success(`Converted ${results.length} file${results.length > 1 ? "s" : ""} to Word`);
     } catch (err) {
       console.error("PDF to Word failed:", err);
-      toast.error("Conversion failed", { description: "Could not process one or more files." });
+      toast.error("Conversion failed", { description: String(err instanceof Error ? err.message : "Could not process one or more files.") });
       setStep("ready");
     }
   }, [files]);
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = convertedCount > 1 ? "pdf-to-word.zip" : `${files[0]?.file.name.replace(/\.pdf$/i, "")}.docx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = convertedCount > 1 ? "pdf-to-word.zip" : `${files[0]?.file.name.replace(/\.pdf$/i, "")}.docx`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {

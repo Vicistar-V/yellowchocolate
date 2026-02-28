@@ -9,6 +9,7 @@ import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
 import { renderHtmlToPdf } from "@/lib/html-to-pdf-renderer";
+import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 
 type Step = "upload" | "ready" | "processing" | "done";
@@ -36,17 +37,69 @@ const EXCEL_CSS = `
   tr:nth-child(even) td { background: #fafafa; }
 `;
 
+/**
+ * Convert workbook to HTML using AOA (array-of-arrays) for reliability.
+ * Falls back gracefully for empty sheets.
+ */
 function workbookToHtml(workbook: XLSX.WorkBook): string {
   const sheets = workbook.SheetNames;
   let html = "";
+  let hasContent = false;
+
   for (const name of sheets) {
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
+
+    // Use AOA for more reliable rendering
+    const aoa: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+
+    // Filter out completely empty rows
+    const rows = aoa.filter((row) => row.some((cell) => cell !== undefined && cell !== null && String(cell).trim() !== ""));
+
+    if (rows.length === 0) {
+      if (sheets.length > 1) {
+        html += `<h2>${name}</h2><p style="color:#999;font-style:italic;">Empty sheet</p>`;
+      }
+      continue;
+    }
+
+    hasContent = true;
     if (sheets.length > 1) {
       html += `<h2>${name}</h2>`;
     }
-    html += XLSX.utils.sheet_to_html(sheet, { editable: false });
+
+    // Find max columns
+    const maxCols = Math.max(...rows.map((r) => r.length));
+
+    html += `<table>`;
+    // First row as header
+    html += `<thead><tr>`;
+    for (let c = 0; c < maxCols; c++) {
+      const val = rows[0]?.[c];
+      html += `<th>${val !== undefined && val !== null ? String(val) : ""}</th>`;
+    }
+    html += `</tr></thead>`;
+
+    // Remaining rows
+    if (rows.length > 1) {
+      html += `<tbody>`;
+      for (let r = 1; r < rows.length; r++) {
+        html += `<tr>`;
+        for (let c = 0; c < maxCols; c++) {
+          const val = rows[r]?.[c];
+          html += `<td>${val !== undefined && val !== null ? String(val) : ""}</td>`;
+        }
+        html += `</tr>`;
+      }
+      html += `</tbody>`;
+    }
+    html += `</table>`;
   }
+
+  if (!hasContent) {
+    html = `<p style="color:#999;font-style:italic;">No data found in the spreadsheet.</p>`;
+  }
+
   return html;
 }
 
@@ -96,7 +149,7 @@ export default function ExcelToPdf() {
 
         const blob = await renderHtmlToPdf(htmlContent, {
           css: EXCEL_CSS,
-          pageWidth: 1100,  // wider for spreadsheets
+          pageWidth: 1100,
           onProgress: (p) => {
             const fileProgress = ((i + p / 100) / files.length) * 100;
             setProgress(Math.round(fileProgress));
@@ -130,20 +183,16 @@ export default function ExcelToPdf() {
       toast.success(`Converted ${pdfBlobs.length} file${pdfBlobs.length > 1 ? "s" : ""} successfully`);
     } catch (err) {
       console.error("Excel to PDF failed:", err);
-      toast.error("Conversion failed", { description: "Could not process one or more files." });
+      toast.error("Conversion failed", { description: String(err instanceof Error ? err.message : "Could not process one or more files.") });
       setStep("ready");
     }
   }, [files]);
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
     const isZip = convertedCount > 1;
-    a.download = isZip ? "excel-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(xlsx?|csv|XLSX?|CSV)$/, "")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = isZip ? "excel-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(xlsx?|csv|XLSX?|CSV)$/, "")}.pdf`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {

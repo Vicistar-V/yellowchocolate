@@ -8,6 +8,7 @@ import { FileList } from "@/components/tool/FileList";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
+import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 
@@ -34,11 +35,22 @@ interface SlideContent {
   images: { data: Uint8Array; mime: string }[];
 }
 
+/** Decode common XML entities */
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+}
+
 async function parsePptx(buffer: ArrayBuffer): Promise<SlideContent[]> {
   const zip = await JSZip.loadAsync(buffer);
   const slides: SlideContent[] = [];
 
-  // Find slide files
   const slideFiles = Object.keys(zip.files)
     .filter((f) => /^ppt\/slides\/slide\d+\.xml$/i.test(f))
     .sort((a, b) => {
@@ -51,18 +63,20 @@ async function parsePptx(buffer: ArrayBuffer): Promise<SlideContent[]> {
     const xml = await zip.file(slidePath)?.async("text");
     if (!xml) continue;
 
-    // Extract text content from XML
+    // Extract text — improved regex to handle attributes on <a:t>
     const texts: string[] = [];
     const paragraphs = xml.split(/<a:p[\s>]/);
 
     for (const para of paragraphs) {
       const paraTexts: string[] = [];
-      const matches = para.matchAll(/<a:t>(.*?)<\/a:t>/g);
+      // Match <a:t> with optional attributes
+      const matches = para.matchAll(/<a:t[^>]*>(.*?)<\/a:t>/gs);
       for (const m of matches) {
-        paraTexts.push(m[1]);
+        paraTexts.push(decodeXmlEntities(m[1]));
       }
-      if (paraTexts.length > 0) {
-        texts.push(paraTexts.join(""));
+      const joined = paraTexts.join("").trim();
+      if (joined) {
+        texts.push(joined);
       }
     }
 
@@ -73,7 +87,7 @@ async function parsePptx(buffer: ArrayBuffer): Promise<SlideContent[]> {
 
     if (relFile) {
       const relXml = await relFile.async("text");
-      const imgRels = relXml.matchAll(/Target="([^"]*\.(png|jpe?g|gif|bmp|svg))"/gi);
+      const imgRels = relXml.matchAll(/Target="([^"]*\.(png|jpe?g|gif|bmp|svg|tif|tiff|emf|wmf))"/gi);
 
       for (const rel of imgRels) {
         let imgPath = rel[1];
@@ -82,10 +96,14 @@ async function parsePptx(buffer: ArrayBuffer): Promise<SlideContent[]> {
         }
         const imgFile = zip.file(imgPath);
         if (imgFile) {
-          const data = await imgFile.async("uint8array");
-          const ext = rel[2].toLowerCase();
-          const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-          images.push({ data, mime });
+          try {
+            const data = await imgFile.async("uint8array");
+            const ext = rel[2].toLowerCase();
+            const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
+            images.push({ data, mime });
+          } catch {
+            // skip unreadable images
+          }
         }
       }
     }
@@ -103,41 +121,43 @@ async function renderSlidesToPdf(
   const pdfDoc = await PDFDocument.create();
   const slideWidth = 960;
   const slideHeight = 540;
-  const pdfW = 720;  // 10in * 72pt
-  const pdfH = 405;  // 5.625in * 72pt (16:9)
+  const pdfW = 720;
+  const pdfH = 405;
 
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i];
 
-    // Build slide HTML
     const container = document.createElement("div");
     container.style.cssText = `
-      position: fixed; top: -99999px; left: -99999px;
+      position: fixed; left: 0; top: 0;
       width: ${slideWidth}px; height: ${slideHeight}px;
       background: white; padding: 40px 50px;
       box-sizing: border-box; display: flex; flex-direction: column;
       justify-content: center; font-family: 'Segoe UI', Arial, sans-serif;
-      overflow: hidden;
+      overflow: hidden; z-index: -99999; opacity: 0; pointer-events: none;
     `;
 
-    // Add images first (as background / visual)
+    // Add images first
     const blobUrls: string[] = [];
     if (slide.images.length > 0) {
-      for (const img of slide.images.slice(0, 2)) {
-        const blob = new Blob([img.data.buffer as ArrayBuffer], { type: img.mime });
-        const url = URL.createObjectURL(blob);
-        blobUrls.push(url);
-        const imgEl = document.createElement("img");
-        imgEl.src = url;
-        imgEl.style.cssText = "max-width: 100%; max-height: 200px; object-fit: contain; margin: 8px auto; display: block;";
-        container.appendChild(imgEl);
+      for (const img of slide.images.slice(0, 3)) {
+        try {
+          const blob = new Blob([img.data.buffer as ArrayBuffer], { type: img.mime });
+          const url = URL.createObjectURL(blob);
+          blobUrls.push(url);
+          const imgEl = document.createElement("img");
+          imgEl.src = url;
+          imgEl.style.cssText = "max-width: 100%; max-height: 220px; object-fit: contain; margin: 8px auto; display: block;";
+          container.appendChild(imgEl);
 
-        // Wait for image to load
-        await new Promise<void>((resolve) => {
-          imgEl.onload = () => resolve();
-          imgEl.onerror = () => resolve();
-          setTimeout(resolve, 1000);
-        });
+          await new Promise<void>((resolve) => {
+            imgEl.onload = () => resolve();
+            imgEl.onerror = () => resolve();
+            setTimeout(resolve, 2000);
+          });
+        } catch {
+          // skip problematic images
+        }
       }
     }
 
@@ -157,7 +177,6 @@ async function renderSlidesToPdf(
       }
     }
 
-    // If slide is empty, show placeholder
     if (slide.texts.length === 0 && slide.images.length === 0) {
       const emptyEl = document.createElement("p");
       emptyEl.textContent = `Slide ${i + 1}`;
@@ -283,20 +302,16 @@ export default function PowerPointToPdf() {
       toast.success(`Converted ${pdfBlobs.length} presentation${pdfBlobs.length > 1 ? "s" : ""} successfully`);
     } catch (err) {
       console.error("PowerPoint to PDF failed:", err);
-      toast.error("Conversion failed", { description: "Could not process one or more files." });
+      toast.error("Conversion failed", { description: String(err instanceof Error ? err.message : "Could not process one or more files.") });
       setStep("ready");
     }
   }, [files]);
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
     const isZip = convertedCount > 1;
-    a.download = isZip ? "pptx-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(pptx?|PPTX?)$/, "")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = isZip ? "pptx-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(pptx?|PPTX?)$/, "")}.pdf`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {

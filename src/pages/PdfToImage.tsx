@@ -10,6 +10,7 @@ import { FileDropZone } from "@/components/tool/FileDropZone";
 import { FileList } from "@/components/tool/FileList";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
+import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -169,12 +170,7 @@ export default function PdfToImage() {
   }, [files, format, scale, quality, formatInfo]);
 
   const downloadSingle = useCallback((page: RenderedPage) => {
-    const url = URL.createObjectURL(page.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = page.fileName;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(page.blob, page.fileName);
   }, []);
 
   const downloadAll = useCallback(async () => {
@@ -185,12 +181,7 @@ export default function PdfToImage() {
     const zip = new JSZip();
     renderedPages.forEach((p) => zip.file(p.fileName, p.blob));
     const zipBlob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(zipBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pdf-to-${format}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(zipBlob, `pdf-to-${format}.zip`);
   }, [renderedPages, format, downloadSingle]);
 
   const handleReset = useCallback(() => {

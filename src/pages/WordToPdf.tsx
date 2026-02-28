@@ -9,6 +9,7 @@ import { ProcessingView } from "@/components/tool/ProcessingView";
 import { SuccessView } from "@/components/tool/SuccessView";
 import { formatFileSize, generateId, staggerAddFiles, type FileItem } from "@/lib/file-utils";
 import { renderHtmlToPdf } from "@/lib/html-to-pdf-renderer";
+import { downloadBlob } from "@/lib/download-utils";
 import { toast } from "sonner";
 
 type Step = "upload" | "ready" | "processing" | "done";
@@ -25,7 +26,8 @@ const TRUST_BADGES = [
   { icon: Files, label: "Batch support" },
 ] as const;
 
-const ACCEPT = ".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+// Only accept .docx — mammoth doesn't reliably handle legacy .doc
+const ACCEPT = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const WORD_CSS = `
   h1 { font-size: 26px; font-weight: 700; margin: 0 0 12px; color: #1a1a1a; }
@@ -50,7 +52,20 @@ export default function WordToPdf() {
 
   const handleFilesSelected = useCallback(
     async (newFiles: File[]) => {
-      const items: FileItem[] = newFiles.map((file) => ({
+      // Filter out .doc files and warn
+      const valid: File[] = [];
+      for (const f of newFiles) {
+        if (f.name.toLowerCase().endsWith(".doc") && !f.name.toLowerCase().endsWith(".docx")) {
+          toast.error(`"${f.name}" is a legacy .doc file`, {
+            description: "Only .docx files are supported. Please re-save as .docx in Word.",
+          });
+        } else {
+          valid.push(f);
+        }
+      }
+      if (valid.length === 0) return;
+
+      const items: FileItem[] = valid.map((file) => ({
         id: generateId(),
         file,
         pageCount: null,
@@ -82,7 +97,30 @@ export default function WordToPdf() {
         const file = files[i].file;
         const buffer = await file.arrayBuffer();
         const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
-        const htmlContent = result.value;
+
+        // Show warnings if any
+        if (result.messages && result.messages.length > 0) {
+          const warnings = result.messages.map((m: any) => m.message || String(m)).join("; ");
+          console.warn(`mammoth warnings for ${file.name}:`, warnings);
+        }
+
+        let htmlContent = result.value;
+
+        // Fallback: if HTML is empty/whitespace, try raw text extraction
+        if (!htmlContent || htmlContent.replace(/<[^>]*>/g, "").trim().length === 0) {
+          const textResult = await mammoth.extractRawText({ arrayBuffer: buffer });
+          const rawText = textResult.value?.trim();
+          if (rawText) {
+            htmlContent = rawText
+              .split("\n")
+              .map((line: string) => `<p>${line || "&nbsp;"}</p>`)
+              .join("");
+            toast.info(`"${file.name}": Used plain-text fallback (limited formatting)`);
+          } else {
+            toast.warning(`"${file.name}" appears to be empty or unsupported`);
+            htmlContent = `<p style="color:#999;font-style:italic;">No extractable content found in this document.</p>`;
+          }
+        }
 
         const blob = await renderHtmlToPdf(htmlContent, {
           css: WORD_CSS,
@@ -96,7 +134,6 @@ export default function WordToPdf() {
         pdfBlobs.push({ name: `${baseName}.pdf`, blob });
       }
 
-      // Ensure minimum processing time for UX
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(2000 - elapsed, 0);
       if (remaining > 0) {
@@ -106,10 +143,15 @@ export default function WordToPdf() {
         await new Promise((r) => setTimeout(r, remaining * 0.4));
       }
 
+      if (pdfBlobs.length === 0) {
+        toast.error("No files could be converted");
+        setStep("ready");
+        return;
+      }
+
       if (pdfBlobs.length === 1) {
         setResultBlob(pdfBlobs[0].blob);
       } else {
-        // ZIP multiple results
         const zip = new JSZip();
         pdfBlobs.forEach((item) => zip.file(item.name, item.blob));
         const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -121,20 +163,16 @@ export default function WordToPdf() {
       toast.success(`Converted ${pdfBlobs.length} file${pdfBlobs.length > 1 ? "s" : ""} successfully`);
     } catch (err) {
       console.error("Word to PDF failed:", err);
-      toast.error("Conversion failed", { description: "Could not process one or more files." });
+      toast.error("Conversion failed", { description: String(err instanceof Error ? err.message : "Could not process one or more files.") });
       setStep("ready");
     }
   }, [files]);
 
   const handleDownload = useCallback(() => {
     if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
-    const a = document.createElement("a");
-    a.href = url;
     const isZip = convertedCount > 1;
-    a.download = isZip ? "word-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(docx?|DOCX?)$/, "")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = isZip ? "word-to-pdf.zip" : `${files[0]?.file.name.replace(/\.(docx?|DOCX?)$/, "")}.pdf`;
+    downloadBlob(resultBlob, filename);
   }, [resultBlob, convertedCount, files]);
 
   const handleReset = useCallback(() => {
@@ -157,7 +195,7 @@ export default function WordToPdf() {
     <ToolPageLayout
       icon={FileText}
       title="Word to PDF"
-      subtitle="Convert DOCX & DOC files to PDF — batch supported"
+      subtitle="Convert DOCX files to PDF — batch supported"
       steps={STEPS}
       currentStep={currentStepKey}
       completedSteps={completedSteps}
@@ -173,7 +211,7 @@ export default function WordToPdf() {
               setIsDragging={setIsDragging}
               accept={ACCEPT}
               title={isDragging ? "Drop your Word files here!" : "Drag & drop Word documents here"}
-              subtitle="DOCX & DOC supported · Multiple files allowed"
+              subtitle="DOCX supported · Multiple files allowed"
               buttonLabel="Select Word Files"
               dragIcon={FileText}
             />
