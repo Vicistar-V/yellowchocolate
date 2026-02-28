@@ -109,7 +109,7 @@ export default function WordToPdf() {
 
         // Create hidden container and render DOCX with docx-preview for better layout fidelity
         const container = document.createElement("div");
-        container.style.cssText = `position:fixed;left:-100000px;top:0;width:${A4_WIDTH_PX}px;background:#fff;z-index:-1;`;
+        container.style.cssText = `position:absolute;left:0;top:0;width:${A4_WIDTH_PX}px;background:#fff;z-index:-9999;opacity:0;pointer-events:none;overflow:hidden;`;
 
         const style = document.createElement("style");
         style.textContent = DOCX_RENDER_CSS;
