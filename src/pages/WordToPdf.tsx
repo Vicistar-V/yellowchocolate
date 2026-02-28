@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import mammoth from "mammoth";
 import html2canvas from "html2canvas";
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
@@ -27,21 +26,25 @@ const TRUST_BADGES = [
   { icon: Files, label: "Batch support" },
 ] as const;
 
-// Only accept .docx — mammoth doesn't reliably handle legacy .doc
+// Only accept .docx
 const ACCEPT = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-const WORD_CSS = `
-  h1 { font-size: 26px; font-weight: 700; margin: 0 0 12px; color: #1a1a1a; }
-  h2 { font-size: 22px; font-weight: 600; margin: 20px 0 8px; color: #1a1a1a; }
-  h3 { font-size: 18px; font-weight: 600; margin: 16px 0 6px; color: #1a1a1a; }
-  p { margin: 0 0 10px; }
-  ul, ol { margin: 0 0 10px; padding-left: 24px; }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; font-size: 13px; }
-  th { background: #f5f5f5; font-weight: 600; }
-  img { max-width: 100%; height: auto; }
-  strong { font-weight: 600; }
+const DOCX_RENDER_CSS = `
+  .docx-wrapper { background: white; }
 `;
+
+const waitForImage = (img: HTMLImageElement) =>
+  new Promise<void>((resolve) => {
+    if (img.complete) return resolve();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+  });
+
+const canvasToPngBytes = async (canvas: HTMLCanvasElement): Promise<Uint8Array> => {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("Could not generate image for PDF page");
+  return new Uint8Array(await blob.arrayBuffer());
+};
 
 export default function WordToPdf() {
   const [step, setStep] = useState<Step>("upload");
@@ -97,96 +100,90 @@ export default function WordToPdf() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i].file;
         const buffer = await file.arrayBuffer();
-        const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+        const { renderAsync } = await import("docx-preview");
 
-        // Show warnings if any
-        if (result.messages && result.messages.length > 0) {
-          const warnings = result.messages.map((m: any) => m.message || String(m)).join("; ");
-          console.warn(`mammoth warnings for ${file.name}:`, warnings);
-        }
-
-        let htmlContent = result.value;
-
-        // Fallback: if HTML is empty/whitespace, try raw text extraction
-        if (!htmlContent || htmlContent.replace(/<[^>]*>/g, "").trim().length === 0) {
-          const textResult = await mammoth.extractRawText({ arrayBuffer: buffer });
-          const rawText = textResult.value?.trim();
-          if (rawText) {
-            htmlContent = rawText
-              .split("\n")
-              .map((line: string) => `<p>${line || "&nbsp;"}</p>`)
-              .join("");
-            toast.info(`"${file.name}": Used plain-text fallback (limited formatting)`);
-          } else {
-            toast.warning(`"${file.name}" appears to be empty or unsupported`);
-            htmlContent = `<p style="color:#999;font-style:italic;">No extractable content found in this document.</p>`;
-          }
-        }
-
-        // Render HTML via html2canvas for pixel-perfect layout
-        const A4_WIDTH = 794;
-        const A4_PAGE_HEIGHT = 1123;
+        const A4_WIDTH_PX = 794;
         const SCALE = 2;
+        const PDF_PAGE_WIDTH = 595.28;
+        const PDF_PAGE_HEIGHT = 841.89;
 
-        // Create hidden container
+        // Create hidden container and render DOCX with docx-preview for better layout fidelity
         const container = document.createElement("div");
-        container.style.cssText = `position:fixed;left:-9999px;top:0;width:${A4_WIDTH}px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1a1a1a;padding:40px 50px;box-sizing:border-box;background:white;`;
+        container.style.cssText = `position:fixed;left:-100000px;top:0;width:${A4_WIDTH_PX}px;background:#fff;z-index:-1;`;
+
         const style = document.createElement("style");
-        style.textContent = WORD_CSS;
+        style.textContent = DOCX_RENDER_CSS;
         container.appendChild(style);
+
         const content = document.createElement("div");
-        content.innerHTML = htmlContent;
+        content.style.cssText = "background:#fff;";
         container.appendChild(content);
+
         document.body.appendChild(container);
 
-        setProgress(Math.round(((i + 0.3) / files.length) * 100));
+        try {
+          await renderAsync(buffer, content, container, {
+            inWrapper: false,
+            breakPages: false,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            useBase64URL: true,
+            renderHeaders: true,
+            renderFooters: true,
+            experimental: true,
+          });
 
-        // Render to canvas
-        const canvas = await html2canvas(container, {
-          scale: SCALE,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: "#ffffff",
-          width: A4_WIDTH,
-          windowWidth: A4_WIDTH,
-        });
+          await Promise.all(Array.from(container.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
-        document.body.removeChild(container);
+          setProgress(Math.round(((i + 0.35) / files.length) * 100));
 
-        setProgress(Math.round(((i + 0.6) / files.length) * 100));
+          const canvas = await html2canvas(content, {
+            scale: SCALE,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#ffffff",
+            windowWidth: A4_WIDTH_PX,
+            width: content.scrollWidth || A4_WIDTH_PX,
+            height: content.scrollHeight,
+            scrollX: 0,
+            scrollY: 0,
+          });
 
-        // Slice canvas into A4 pages and build PDF
-        const pageHeightPx = A4_PAGE_HEIGHT * SCALE;
-        const totalHeight = canvas.height;
-        const pageWidthPx = A4_WIDTH * SCALE;
-        const pdfDoc = await PDFDocument.create();
+          setProgress(Math.round(((i + 0.65) / files.length) * 100));
 
-        const numPages = Math.max(1, Math.ceil(totalHeight / pageHeightPx));
-        for (let p = 0; p < numPages; p++) {
-          const sliceHeight = Math.min(pageHeightPx, totalHeight - p * pageHeightPx);
-          const sliceCanvas = document.createElement("canvas");
-          sliceCanvas.width = pageWidthPx;
-          sliceCanvas.height = sliceHeight;
-          const ctx = sliceCanvas.getContext("2d")!;
-          ctx.drawImage(canvas, 0, p * pageHeightPx, pageWidthPx, sliceHeight, 0, 0, pageWidthPx, sliceHeight);
+          const pageHeightPx = Math.round((canvas.width * PDF_PAGE_HEIGHT) / PDF_PAGE_WIDTH);
+          const pdfDoc = await PDFDocument.create();
 
-          const pngData = sliceCanvas.toDataURL("image/png");
-          const pngBytes = Uint8Array.from(atob(pngData.split(",")[1]), (c) => c.charCodeAt(0));
-          const pngImage = await pdfDoc.embedPng(pngBytes);
+          const numPages = Math.max(1, Math.ceil(canvas.height / pageHeightPx));
+          for (let p = 0; p < numPages; p++) {
+            const yOffset = p * pageHeightPx;
+            const sliceHeight = Math.min(pageHeightPx, canvas.height - yOffset);
 
-          // A4 in points: 595.28 x 841.89
-          const pageHeight = (sliceHeight / pageHeightPx) * 841.89;
-          const page = pdfDoc.addPage([595.28, pageHeight]);
-          page.drawImage(pngImage, { x: 0, y: 0, width: 595.28, height: pageHeight });
+            const sliceCanvas = document.createElement("canvas");
+            sliceCanvas.width = canvas.width;
+            sliceCanvas.height = sliceHeight;
+            const ctx = sliceCanvas.getContext("2d");
+            if (!ctx) throw new Error("Could not render PDF page slice");
+
+            ctx.drawImage(canvas, 0, yOffset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+            const pngImage = await pdfDoc.embedPng(await canvasToPngBytes(sliceCanvas));
+            const pageHeight = (sliceHeight / pageHeightPx) * PDF_PAGE_HEIGHT;
+            const page = pdfDoc.addPage([PDF_PAGE_WIDTH, pageHeight]);
+            page.drawImage(pngImage, { x: 0, y: 0, width: PDF_PAGE_WIDTH, height: pageHeight });
+          }
+
+          const pdfBytes = await pdfDoc.save();
+          const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+
+          setProgress(Math.round(((i + 0.9) / files.length) * 100));
+
+          const baseName = file.name.replace(/\.(docx?|DOCX?)$/, "");
+          pdfBlobs.push({ name: `${baseName}.pdf`, blob });
+        } finally {
+          container.remove();
         }
-
-        const pdfBytes = await pdfDoc.save();
-        const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
-
-        setProgress(Math.round(((i + 0.9) / files.length) * 100));
-
-        const baseName = file.name.replace(/\.(docx?|DOCX?)$/, "");
-        pdfBlobs.push({ name: `${baseName}.pdf`, blob });
       }
 
       const elapsed = Date.now() - startTime;
