@@ -119,15 +119,13 @@ export default function WordToPdf() {
         style.textContent = DOCX_RENDER_CSS;
         container.appendChild(style);
 
-        const content = document.createElement("div");
-        content.style.cssText = "background:#fff;";
-        container.appendChild(content);
+        const styleHost = document.createElement("div");
+        container.appendChild(styleHost);
 
         renderRoot.appendChild(container);
 
         try {
-          console.log("[WordToPdf] renderAsync START");
-          await renderAsync(buffer, content, container, {
+          await renderAsync(buffer, container, styleHost, {
             inWrapper: false,
             breakPages: false,
             ignoreWidth: false,
@@ -137,37 +135,28 @@ export default function WordToPdf() {
             renderFooters: true,
             experimental: true,
           });
-          console.log("[WordToPdf] renderAsync END");
 
-          console.log("[WordToPdf] waiting for images...");
           await Promise.all(Array.from(container.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
-          console.log("[WordToPdf] images loaded");
 
           await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
-          console.log("[WordToPdf] content in DOM:", document.body.contains(content));
-          console.log("[WordToPdf] content dimensions:", content.scrollWidth, "x", content.scrollHeight);
-          console.log("[WordToPdf] renderRoot in DOM:", document.body.contains(renderRoot));
-
           setProgress(Math.round(((i + 0.35) / files.length) * 100));
 
-          if (!document.body.contains(content)) {
+          if (!document.body.contains(container)) {
             throw new Error("Render target detached before capture");
           }
 
-          console.log("[WordToPdf] html2canvas START");
-          const canvas = await html2canvas(content, {
+          const canvas = await html2canvas(container, {
             scale: SCALE,
             useCORS: true,
             allowTaint: false,
             backgroundColor: "#ffffff",
             windowWidth: A4_WIDTH_PX,
-            width: content.scrollWidth || A4_WIDTH_PX,
-            height: content.scrollHeight,
+            width: container.scrollWidth || A4_WIDTH_PX,
+            height: container.scrollHeight,
             scrollX: 0,
             scrollY: 0,
           });
-          console.log("[WordToPdf] html2canvas END, canvas:", canvas.width, "x", canvas.height);
 
           setProgress(Math.round(((i + 0.65) / files.length) * 100));
 
