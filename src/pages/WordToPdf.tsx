@@ -109,7 +109,7 @@ export default function WordToPdf() {
         const PDF_PAGE_HEIGHT = 841.89;
 
         const renderRoot = document.createElement("div");
-        renderRoot.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;opacity:0;pointer-events:none;z-index:-9999;overflow:visible;";
+        renderRoot.style.cssText = `position:fixed;left:-100000px;top:0;width:${A4_WIDTH_PX}px;opacity:1;pointer-events:none;z-index:-1;overflow:visible;background:#fff;`;
         document.body.appendChild(renderRoot);
 
         const container = document.createElement("div");
@@ -142,18 +142,24 @@ export default function WordToPdf() {
 
           setProgress(Math.round(((i + 0.35) / files.length) * 100));
 
-          if (!document.body.contains(container)) {
+          const captureTarget = container.cloneNode(true) as HTMLDivElement;
+          captureTarget.style.cssText = `position:relative;width:${A4_WIDTH_PX}px;min-height:1px;background:#fff;overflow:visible;`;
+          renderRoot.appendChild(captureTarget);
+
+          await Promise.all(Array.from(captureTarget.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
+
+          if (!document.body.contains(captureTarget)) {
             throw new Error("Render target detached before capture");
           }
 
-          const canvas = await html2canvas(container, {
+          const canvas = await html2canvas(captureTarget, {
             scale: SCALE,
             useCORS: true,
             allowTaint: false,
             backgroundColor: "#ffffff",
             windowWidth: A4_WIDTH_PX,
-            width: container.scrollWidth || A4_WIDTH_PX,
-            height: container.scrollHeight,
+            width: captureTarget.scrollWidth || A4_WIDTH_PX,
+            height: captureTarget.scrollHeight,
             scrollX: 0,
             scrollY: 0,
           });
