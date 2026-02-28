@@ -11,7 +11,7 @@ import { FileDropZone } from "@/components/tool/FileDropZone";
 import { ProcessingView } from "@/components/tool/ProcessingView";
 import { formatFileSize, generateId } from "@/lib/file-utils";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { toast } from "sonner";
 
 type Step = "upload" | "configure" | "processing" | "done";
@@ -69,10 +69,6 @@ export default function ProtectPdf() {
   const [showUserPassword, setShowUserPassword] = useState(false);
   const [showOwnerPassword, setShowOwnerPassword] = useState(false);
 
-  // Permissions (visual)
-  const [allowPrinting, setAllowPrinting] = useState(true);
-  const [allowCopying, setAllowCopying] = useState(false);
-  const [allowModifying, setAllowModifying] = useState(false);
 
   const handleFilesSelected = useCallback(async (newFiles: File[]) => {
     const pdfFiles = newFiles.filter(
@@ -334,24 +330,6 @@ export default function ProtectPdf() {
               </p>
             </div>
 
-            {/* Permissions */}
-            <div className="space-y-3 pt-2 border-t">
-              <label className="text-xs font-medium text-foreground">Permissions</label>
-              <div className="space-y-2.5">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <Checkbox checked={allowPrinting} onCheckedChange={(v) => setAllowPrinting(!!v)} />
-                  <span className="text-sm text-foreground">Allow printing</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <Checkbox checked={allowCopying} onCheckedChange={(v) => setAllowCopying(!!v)} />
-                  <span className="text-sm text-foreground">Allow copying text & images</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <Checkbox checked={allowModifying} onCheckedChange={(v) => setAllowModifying(!!v)} />
-                  <span className="text-sm text-foreground">Allow modifying</span>
-                </label>
-              </div>
-            </div>
           </div>
 
           {/* Add more */}
