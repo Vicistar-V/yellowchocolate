@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { PDFDocument } from "pdf-lib";
+import { encryptPDF } from "@pdfsmaller/pdf-encrypt-lite";
 import JSZip from "jszip";
 import {
   Lock, ShieldCheck, Zap, Files, ArrowRight,
@@ -126,23 +127,13 @@ export default function ProtectPdf() {
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         const buffer = await item.file.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-
-        const saveOptions: any = {
-          userPassword,
-        };
-        if (ownerPassword.trim()) {
-          saveOptions.ownerPassword = ownerPassword;
-        }
-        // pdf-lib permissions support
-        saveOptions.permissions = {
-          printing: allowPrinting ? "highResolution" : undefined,
-          copying: allowCopying,
-          modifying: allowModifying,
-        };
-
-        const pdfBytes = await pdfDoc.save(saveOptions);
-        const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+        
+        // Use real RC4 128-bit encryption via @pdfsmaller/pdf-encrypt-lite
+        const pdfBytes = new Uint8Array(buffer);
+        const effectiveOwner = ownerPassword.trim() || userPassword;
+        const encryptedBytes = await encryptPDF(pdfBytes, userPassword, effectiveOwner);
+        
+        const blob = new Blob([encryptedBytes.buffer as ArrayBuffer], { type: "application/pdf" });
         const name = item.file.name.replace(/\.pdf$/i, "_protected.pdf");
         results.push({ name, blob });
         setProgress(Math.round(((i + 1) / items.length) * 90));
@@ -162,7 +153,7 @@ export default function ProtectPdf() {
       toast.error("Protection failed");
       setStep("configure");
     }
-  }, [items, canProcess, userPassword, ownerPassword, allowPrinting, allowCopying, allowModifying]);
+  }, [items, canProcess, userPassword, ownerPassword]);
 
   const downloadSingle = useCallback((result: { name: string; blob: Blob }) => {
     const url = URL.createObjectURL(result.blob);
