@@ -112,16 +112,16 @@ export default function WordToPdf() {
         renderRoot.style.cssText = `position:fixed;left:-100000px;top:0;width:${A4_WIDTH_PX}px;opacity:1;pointer-events:none;z-index:-1;overflow:visible;background:#fff;`;
         document.body.appendChild(renderRoot);
 
+        // styleHost must be OUTSIDE bodyContainer because renderAsync clears bodyContainer innerHTML
+        const styleHost = document.createElement("div");
+        renderRoot.appendChild(styleHost);
+
+        const globalStyle = document.createElement("style");
+        globalStyle.textContent = DOCX_RENDER_CSS;
+        styleHost.appendChild(globalStyle);
+
         const container = document.createElement("div");
         container.style.cssText = `position:relative;width:${A4_WIDTH_PX}px;min-height:1px;background:#fff;overflow:visible;`;
-
-        const style = document.createElement("style");
-        style.textContent = DOCX_RENDER_CSS;
-        container.appendChild(style);
-
-        const styleHost = document.createElement("div");
-        container.appendChild(styleHost);
-
         renderRoot.appendChild(container);
 
         try {
@@ -136,26 +136,22 @@ export default function WordToPdf() {
             experimental: true,
           });
 
-          await Promise.all(Array.from(container.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
+          await Promise.all(Array.from(renderRoot.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
 
+          // Give fonts & layout time to settle
+          await new Promise<void>((resolve) => setTimeout(() => resolve(), 300));
           await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
           setProgress(Math.round(((i + 0.35) / files.length) * 100));
 
-          const captureTarget = container.cloneNode(true) as HTMLDivElement;
-          captureTarget.style.cssText = `position:relative;width:${A4_WIDTH_PX}px;min-height:1px;background:#fff;overflow:visible;`;
-          renderRoot.appendChild(captureTarget);
-
-          await Promise.all(Array.from(captureTarget.querySelectorAll("img")).map((img) => waitForImage(img as HTMLImageElement)));
-
-          if (!document.body.contains(captureTarget)) {
+          if (!document.body.contains(container)) {
             throw new Error("Render target detached before capture");
           }
 
           setProgress(Math.round(((i + 0.55) / files.length) * 100));
 
           const pdfDoc = await PDFDocument.create();
-          const docxPages = Array.from(captureTarget.querySelectorAll(".docx-wrapper > section, .docx > section")) as HTMLElement[];
+          const docxPages = Array.from(container.querySelectorAll(".docx-wrapper > section, .docx > section")) as HTMLElement[];
           const pageElements = docxPages.filter((el) => el.scrollWidth > 0 && el.scrollHeight > 0);
 
           if (pageElements.length > 0) {
@@ -178,14 +174,14 @@ export default function WordToPdf() {
               page.drawImage(pngImage, { x: 0, y: 0, width: PDF_PAGE_WIDTH, height: pageHeight });
             }
           } else {
-            const canvas = await html2canvas(captureTarget, {
+            const canvas = await html2canvas(container, {
               scale: SCALE,
               useCORS: true,
               allowTaint: false,
               backgroundColor: "#ffffff",
               windowWidth: A4_WIDTH_PX,
-              width: captureTarget.scrollWidth || A4_WIDTH_PX,
-              height: captureTarget.scrollHeight,
+              width: container.scrollWidth || A4_WIDTH_PX,
+              height: container.scrollHeight,
               scrollX: 0,
               scrollY: 0,
             });
