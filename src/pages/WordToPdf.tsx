@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import html2canvas from "html2canvas";
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
@@ -53,6 +53,7 @@ export default function WordToPdf() {
   const [progress, setProgress] = useState(0);
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [convertedCount, setConvertedCount] = useState(0);
+  const renderHostRef = useRef<HTMLDivElement | null>(null);
 
   const handleFilesSelected = useCallback(
     async (newFiles: File[]) => {
@@ -107,9 +108,9 @@ export default function WordToPdf() {
         const PDF_PAGE_WIDTH = 595.28;
         const PDF_PAGE_HEIGHT = 841.89;
 
-        // Create hidden container and render DOCX with docx-preview for better layout fidelity
+        const host = renderHostRef.current ?? document.body;
         const container = document.createElement("div");
-        container.style.cssText = `position:absolute;left:0;top:0;width:${A4_WIDTH_PX}px;background:#fff;z-index:-9999;opacity:0;pointer-events:none;overflow:hidden;`;
+        container.style.cssText = `position:relative;width:${A4_WIDTH_PX}px;background:#fff;overflow:hidden;`;
 
         const style = document.createElement("style");
         style.textContent = DOCX_RENDER_CSS;
@@ -119,7 +120,7 @@ export default function WordToPdf() {
         content.style.cssText = "background:#fff;";
         container.appendChild(content);
 
-        document.body.appendChild(container);
+        host.appendChild(container);
 
         try {
           await renderAsync(buffer, content, container, {
@@ -322,6 +323,7 @@ export default function WordToPdf() {
           resetLabel="Convert More"
         />
       )}
+      <div ref={renderHostRef} aria-hidden className="fixed left-0 top-0 w-[1px] h-[1px] overflow-hidden opacity-0 pointer-events-none -z-10" />
     </ToolPageLayout>
   );
 }
