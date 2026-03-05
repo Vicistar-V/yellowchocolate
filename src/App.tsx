@@ -30,6 +30,9 @@ import AddWatermark from "./pages/AddWatermark";
 import CropPdf from "./pages/CropPdf";
 import UnlockPdf from "./pages/UnlockPdf";
 import ProtectPdf from "./pages/ProtectPdf";
+import SignPdf from "./pages/SignPdf";
+import RedactPdf from "./pages/RedactPdf";
+import ComparePdf from "./pages/ComparePdf";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -65,6 +68,9 @@ const App = () => (
             <Route path="/crop" element={<CropPdf />} />
             <Route path="/unlock" element={<UnlockPdf />} />
             <Route path="/protect" element={<ProtectPdf />} />
+            <Route path="/sign" element={<SignPdf />} />
+            <Route path="/redact" element={<RedactPdf />} />
+            <Route path="/compare" element={<ComparePdf />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>
