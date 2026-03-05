@@ -87,9 +87,9 @@ const toolCategories: ToolCategory[] = [
     items: [
       { title: "Unlock PDF", url: "/unlock", icon: Unlock, enabled: true },
       { title: "Protect PDF", url: "/protect", icon: Lock, enabled: true },
-      { title: "Sign PDF", url: "/sign", icon: PenTool, enabled: false },
-      { title: "Redact PDF", url: "/redact", icon: EyeOff, enabled: false },
-      { title: "Compare PDF", url: "/compare", icon: GitCompare, enabled: false },
+      { title: "Sign PDF", url: "/sign", icon: PenTool, enabled: true },
+      { title: "Redact PDF", url: "/redact", icon: EyeOff, enabled: true },
+      { title: "Compare PDF", url: "/compare", icon: GitCompare, enabled: true },
     ],
   },
   {

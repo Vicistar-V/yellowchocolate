@@ -4,7 +4,7 @@ import {
   Wrench, Zap, ShieldCheck, Globe, Trash2, FileOutput, LayoutList,
   FileText, Table, Presentation, Code,
   ImageDown, PresentationIcon, TableProperties, Shield,
-  Hash, Droplets, Crop,
+  Hash, Droplets, Crop, PenTool, EyeOff, GitCompare,
 } from "lucide-react";
 
 const highlights = [
@@ -31,6 +31,9 @@ const highlights = [
   { icon: Crop, label: "Crop PDF", desc: "Trim page margins", url: "/crop", enabled: true },
   { icon: Unlock, label: "Unlock PDF", desc: "Remove password protection", url: "/unlock", enabled: true },
   { icon: Lock, label: "Protect PDF", desc: "Add password security", url: "/protect", enabled: true },
+  { icon: PenTool, label: "Sign PDF", desc: "Add your signature", url: "/sign", enabled: true },
+  { icon: EyeOff, label: "Redact PDF", desc: "Cover sensitive content", url: "/redact", enabled: true },
+  { icon: GitCompare, label: "Compare PDF", desc: "Visual document diff", url: "/compare", enabled: true },
   { icon: Languages, label: "Translate PDF", desc: "Translate documents", url: "/translate-pdf", enabled: false },
 ];
 
